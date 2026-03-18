@@ -1,0 +1,58 @@
+Package: APPLE
+Type: Package
+Title: Analysis Pipeline for PolyA-length and PolyA-site
+Version: 0.1.0
+Authors@R: c(
+    person(
+      "Jane", "Doe",
+      email = "jane@example.com",
+      role = c("aut", "cre")
+    )
+  )
+Description: A comprehensive R package for analyzing polyA-seq data,
+    including alignment, polyA site detection, clustering, annotation,
+    differential expression analysis, and tail length analysis.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Imports: 
+    bedr,
+    stringr,
+    dplyr,
+    tidyr,
+    matrixStats,
+    pbmcapply,
+    FactoMineR,
+    factoextra,
+    ggplot2,
+    uwot,
+    lme4,
+    lmerTest,
+    GenomicRanges,
+    GenomicFeatures,
+    rtracklayer,
+    Rsamtools,
+    DESeq2,
+    ggbio,
+    readr,
+    BiocGenerics, 
+    GenomeInfoDb,
+    IRanges, 
+    S4Vectors,
+    SummarizedExperiment, 
+    methods,
+    outliers,
+    tidyselect,
+    data.table,
+    parallel
+Suggests: 
+    testthat,
+    knitr,
+    rmarkdown,
+    BiocManager
+VignetteBuilder: knitr
+SystemRequirements(optional): 
+    bedtools (>= 2.30.0),
+    samtools (>= 1.13),
+    minimap2 (>= 2.24)
+RoxygenNote: 7.3.3
