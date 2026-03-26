@@ -300,3 +300,139 @@ A tibble with columns: gene_id, pd, r, p.value.
 ```
 
 # 4. Application of APPLE
+In this demonstration, we applied APPLE to a test dataset from *Homo sapiens*, providing a step-by-step guide on how to use APPLE:
+
+### Preparation of necessary data:
+Download (a) the test data from the APPLE website, (b) the genome release [Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz]() and corresponding genome annotation [Homo_sapiens.GRCh38.113.gtf]() from [*Ensembl*](https://www.ensembl.org/) database.
+
+### 1) Extracting 3’ ends from validly mapped reads of scRNA-seq data
+```
+library(scDAPA2)
+samtools_path <- "/usr/local/bin/samtools" # version: 1.17
+bedtools_path <- "/usr/bin/bedtools"
+umi_tools_path <- "/usr/bin/umi_tools"
+
+beds = Extract.3ends(dir = "bams", samtools = samtools_path, bedtools = bedtools_path, umi_tools = umi_tools_path, threads = 4)
+```
+
+### 2) Load 3' ends data
+```
+scPolyA <- Load.polyA(files = beds)
+names(scPolyA@pre.polyA) <- str_extract(names(scPolyA@pre.polyA), "\\S+(?=\\.fl)")
+scPolyA@sample_names <- names(scPolyA@pre.polyA)
+```
+
+### 3) Remove potential internal priming artifacts
+```
+scPolyA <- Remove.IP(scPolyA = scPolyA, fasta = "Arabidopsis_thaliana.TAIR10.dna.toplevel.fa")
+```
+
+### 4) Weighted density peak clustering
+```
+scPolyA <- Cluster.polyA(scPolyA = scPolyA, max.gapwidth = 50, mc.cores = 4)
+```
+
+### 5) Feature annotation and APA quantification at the sample level
+``` 
+scPolyA <- Annotate.polyA(scPolyA = scPolyA, gtf = "Arabidopsis_thaliana.TAIR10.42.gtf", gene_biotypes = "protein_coding")
+```
+
+### 6) Measuring polyadenylation usage at the level of individual cells
+```
+bam_files = c("bams/rep1.bam", "bams/rep2.bam", "bams/rep3.bam")
+output_dir = "count"
+featureCounts_path = "/home/subread-2.0.3-Linux-x86_64/bin/featureCounts"
+
+count.files <- Count.polyA(scPolyA = scPolyA, bam_file = bam_files, out_dir = output_dir, featureCounts = featureCounts_path, samtools = samtools_path, umi_tools = umi_tools_path, threads = 4)
+```
+
+### 7) Quality control
+```
+QC.polyA(scPolyA = scPolyA, count.files = count.files, type = "counts")
+QC.polyA(scPolyA = scPolyA, count.files = count.files, type = "features", min_umi = 15000)
+```
+
+### 8) Filter cells and PACs
+```
+scPolyA <- Filter.scPolyA(scPolyA = scPolyA, count.files = count.files, min_umi = 15000, max_umi = 200000, min_gene = 2000, max_gene = 20000, max_mt = 0.03, max_ig = 0.03, min.cells = 10, min.count = 20, min.pac.frac = 0.05, out_dir = "count/", mt = "ATMG")
+```
+
+### 9) Construct a Seurat-compatible object for further statistical analysis
+```
+count.filter.files <- c("count/rep1.filter.count.csv",
+                        "count/rep2.filter.count.csv",
+                        "count/rep3.filter.count.csv")
+cell_type.annotation <- "Seurat.meta.data.provide.csv"
+
+scPolyASeurat <- CreatePASeurat(scPolyA = scPolyA, count.files = count.filter.files, cell.file = cell_type.annotation, sample.index = sample.index)
+ ```
+
+### 10) Examining APA dynamics across a variety of cell types or samples
+
+(1) Find differentially expressed PACs
+
+```
+# (a) Find differentially expressed PACs between two specified identity classes (e.g. cell types) using the Wilcoxon Rank Sum test.
+celltypes <- levels(scPolyASeurat)
+celltypes <- celltypes[which(celltypes != "Unknown")]
+markers <- c()
+for(c1 in 1:(length(celltypes)-1)){
+  for(c2 in (c1+1):length(celltypes)){
+    tmp <- FindPAMarkers(object = scPolyASeurat, ident.1 = celltypes[c1], ident.2 = celltypes[c2],
+                         only.pos = F, min.pct = 0.25, logfc.threshold = 0.25)
+    markers <- rbind(markers, tmp)
+  }
+}
+
+# (b) Or find differentially expressed PACs for each of the identity classes (e.g. cell types) in a dataset using the Wilcoxon Rank Sum test. 
+all.markers <- FindAllPAMarkers(object = scPolyASeurat, only.pos = F, min.pct = 0.25, logfc.threshold = 0.25)
+```
+
+(2) Detect changes in the relative usage of PACs
+```
+contrasts <- c()
+for(c1 in 1:(length(celltypes)-1)){
+  for(c2 in (c1+1):length(celltypes)){
+    con <- paste(celltypes[c1], celltypes[c2], sep = "-")
+    contrasts <- c(contrasts, con)
+  }
+}
+
+DTU <- CalcPADTU(object = scPolyASeurat, group.col = "cell_type", contrasts = contrasts,
+                 diagplot1 = F, diagplot2 = F)
+```
+
+(3) Quantify relative usages based on Pearson residuals
+```
+scPolyASeurat <- CalcPAResiduals(object = scPolyASeurat, assay = "PAC", gene.names = "gene_id", verbose = F)
+
+scPolyASeurat@meta.data$sample <- paste0("sample", str_extract(scPolyASeurat@meta.data$barcode, "(?<=-)\\S+"))
+DE <- c()
+for(c1 in 1:(length(celltypes)-1)){
+  for(c2 in (c1+1):length(celltypes)){
+    tmp <- FindDiffPA(object = scPolyASeurat, assay = "PAC", ident.1 = celltypes[c1],
+                      ident.2 = celltypes[c2], covariates = "sample", gene.names = "gene_id")
+    DE <- rbind(DE, tmp)
+  }
+}
+```
+
+(4) Calculate the relative expression difference (RED)
+```
+DRED <- CalcPARED(object = scPolyASeurat, method = "DRED", threads = 4)
+
+PRED <- CalcPARED(object = scPolyASeurat, method = "PRED", threads = 4)
+```
+
+### 11) Visualizing the APA preference of a specific gene across various cell types and/or samples
+```
+bams <- c("count/rep1.bam.featureCounts.sort.bam",
+          "count/rep2.bam.featureCounts.sort.bam",
+          "count/rep3.bam.featureCounts.sort.bam")
+gtf = "Arabidopsis_thaliana.TAIR10.42.gtf"
+fasta = "Arabidopsis_thaliana.TAIR10.dna.toplevel.fa"
+pas = "arabidopsis_thaliana.high_confidence.PAC.annotation.tpm.csv"
+
+Visualize.PolyA(object = scPolyASeurat, gene.id = "AT5G45970", bams = bams, celltypes = c("Hair", "Xylem"),
+                sample.index = 1:3, gtf = gtf, fasta = fasta, pas = pas, density = "type1")
+```
