@@ -1509,6 +1509,153 @@ Quantify.GeneAPA <- function(QpolyA,colData,contrast){
   res = gene.Sites %>% group_by(gene_id) %>% do(dynamicsDetect(.[,control],.[,treat],.$strand,.$center))
 }
 
+################################################
+    #       compute_gene_RPP       #
+################################################
+#' Compute gene-level relative polyadenylation proportion (RPP) scores
+#'
+#' This function processes APA (alternative polyadenylation) site data to
+#' compute gene-level RPP scores. It filters out intergenic sites, retains
+#' only genes with at least two APA sites, calculates a rank-based weight
+#' (`ps_rank`) based on site position and strand, normalizes counts per
+#' sample to proportions, weights each site by its rank, and finally sums
+#' the weighted proportions per gene.
+#'
+#' @param polyA A data frame containing APA site information. Must include:
+#'   - Columns named as in `sample_names` (counts per sample).
+#'   - Columns specified by `type_col`, `gene_id_col`, `strand_col`, `center_col`.
+#'   - Row names should be unique site identifiers (used as `cluster_id`).
+#' @param sample_names Character vector of sample names (must be columns in `polyA`).
+#' @param type_col Name of the column containing site type (default: "type").
+#' @param gene_id_col Name of the column containing gene identifier (default: "gene_id").
+#' @param strand_col Name of the column containing strand information (default: "strand").
+#' @param center_col Name of the column containing genomic center position (default: "center").
+#'
+#' @return A data frame with one row per gene and columns:
+#'   - `gene_id`: gene identifier (from `gene_id_col`).
+#'   - One column per sample (named as in `sample_names`) containing the RPP score.
+#'
+#' @importFrom dplyr %>% filter group_by mutate if_else percent_rank summarise_at vars all_of
+#' @importFrom rlang !! sym
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming `polyA` is a data frame with APA site counts and metadata,
+#' # and `sample_names` is a vector of sample column names.
+#' gene_rpp <- compute_gene_RPP(polyA, sample_names)
+#' }
+#'
+#' @export
+compute_gene_RPP <- function(polyA,
+                             sample_names,
+                             type_col = "type",
+                             gene_id_col = "gene_id",
+                             strand_col = "strand",
+                             center_col = "center") {
+
+  # Input validation
+  if (!is.data.frame(polyA)) stop("polyA must be a data frame")
+  if (!all(sample_names %in% colnames(polyA))) {
+    missing <- setdiff(sample_names, colnames(polyA))
+    stop("Sample columns missing from polyA: ", paste(missing, collapse = ", "))
+  }
+  required_cols <- c(type_col, gene_id_col, strand_col, center_col)
+  if (!all(required_cols %in% colnames(polyA))) {
+    missing <- setdiff(required_cols, colnames(polyA))
+    stop("Required columns missing from polyA: ", paste(missing, collapse = ", "))
+  }
+
+  # Make a copy to avoid modifying original
+  rpp_data <- polyA
+
+  # Add cluster_id from row names (if row names are unique site IDs)
+  if (is.null(rownames(rpp_data))) {
+    rpp_data$cluster_id <- seq_len(nrow(rpp_data))
+  } else {
+    rpp_data$cluster_id <- rownames(rpp_data)
+  }
+
+  # Filter and compute site-level weighted proportions
+  rpp_data <- rpp_data %>%
+    dplyr::filter(!!sym(type_col) != "intergenic") %>%
+    dplyr::group_by(!!sym(gene_id_col)) %>%
+    dplyr::filter(dplyr::n() > 1) %>%
+    dplyr::mutate(ps_rank = dplyr::if_else(!!sym(strand_col) == "+",
+                                           dplyr::percent_rank(!!sym(center_col)),
+                                           dplyr::percent_rank(-!!sym(center_col)))) %>%
+    dplyr::mutate_at(dplyr::vars(dplyr::all_of(sample_names)), ~ . / sum(.)) %>%
+    dplyr::mutate_at(dplyr::vars(dplyr::all_of(sample_names)), ~ . * ps_rank)
+
+  # Aggregate to gene level
+  gene_rpp <- rpp_data %>%
+    dplyr::group_by(!!sym(gene_id_col)) %>%
+    dplyr::summarise_at(dplyr::vars(dplyr::all_of(sample_names)), ~ sum(., na.rm = TRUE))
+
+  # Rename the grouping column to 'gene_id' for consistency
+  colnames(gene_rpp)[1] <- "gene_id"
+
+  return(gene_rpp)
+}
+
+#' Compute delta RPP from precomputed gene-level RPP scores
+#'
+#' This function calculates the difference in mean relative polyadenylation
+#' proportion (RPP) between two conditions (e.g., treatment vs. control)
+#' using a precomputed gene-level RPP matrix. The delta RPP is defined as
+#' `mean(treat group RPP) - mean(control group RPP)`.
+#'
+#' @param polyA_rank A data frame containing gene-level RPP scores.
+#'   Must include a column `gene_id` and one column per sample, named
+#'   exactly as the sample identifiers in `colData`.
+#' @param colData A data frame with sample metadata. Row names must be
+#'   sample names (matching column names in `polyA_rank`). It must contain
+#'   a column named `condition` that specifies group membership.
+#' @param control_cond Character string, the name of the control condition
+#'   as it appears in `colData$condition`.
+#' @param treat_cond Character string, the name of the treatment condition
+#'   as it appears in `colData$condition`.
+#'
+#' @return A data frame with two columns:
+#'   \item{gene_id}{Gene identifier (from `polyA_rank$gene_id`).}
+#'   \item{delta_RPP}{Difference in mean RPP (treat minus control).}
+#'
+#' @examples
+#' \dontrun{
+#' # Assuming polyA_rank and colData are available
+#' delta <- compute_delta_RPP(polyA_rank, colData, "NC", "Fip1")
+#' head(delta)
+#' }
+#'
+#' @export
+compute_delta_RPP <- function(polyA_rank, colData, control_cond, treat_cond) {
+  # Input validation
+  if (!is.data.frame(polyA_rank)) stop("polyA_rank must be a data frame")
+  if (!is.data.frame(colData)) stop("colData must be a data frame")
+  if (!"gene_id" %in% colnames(polyA_rank)) stop("polyA_rank must contain a 'gene_id' column")
+  if (!"condition" %in% colnames(colData)) stop("colData must contain a 'condition' column")
+
+  # Extract sample names for each condition
+  control_samples <- rownames(colData)[colData$condition == control_cond]
+  treat_samples   <- rownames(colData)[colData$condition == treat_cond]
+
+  # Check that sample columns exist in polyA_rank
+  if (!all(control_samples %in% colnames(polyA_rank))) {
+    missing <- setdiff(control_samples, colnames(polyA_rank))
+    stop("Control samples missing from polyA_rank: ", paste(missing, collapse = ", "))
+  }
+  if (!all(treat_samples %in% colnames(polyA_rank))) {
+    missing <- setdiff(treat_samples, colnames(polyA_rank))
+    stop("Treatment samples missing from polyA_rank: ", paste(missing, collapse = ", "))
+  }
+
+  # Compute row means and delta
+  delta <- rowMeans(polyA_rank[, treat_samples, drop = FALSE]) -
+    rowMeans(polyA_rank[, control_samples, drop = FALSE])
+
+  # Return result as a data frame
+  data.frame(gene_id = polyA_rank$gene_id, delta_RPP = delta, stringsAsFactors = FALSE)
+}
+
 
 ################################################
 #       Detect dynamics of poly(A) sites       #

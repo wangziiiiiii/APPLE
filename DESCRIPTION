@@ -44,7 +44,8 @@ Imports:
     outliers,
     tidyselect,
     data.table,
-    parallel
+    parallel,
+    DEXSeq
 Suggests: 
     testthat,
     knitr,
