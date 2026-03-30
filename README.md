@@ -54,11 +54,14 @@ if (!require("ggbio")) BiocManager::install("ggbio")
 if (!require("readr")) BiocManager::install("readr")
 if (!require("stringr")) BiocManager::install("stringr")
 ```
+
 ### [2]. Install scDAPA2
 ```         
 install.packages('devtools')
 devtools::install_github("wangziiiiiii/APPLE")
 ```
+Note: We have enabled automatic installation of dependencies within this R package.
+
 # 3. Workflow of scDAPA2
 The essential functions of APPLE include: (1) Minimap2 alignment and filtering on the reads.(optional) (2) Extracting polyAsite and detect polyA tail (3) Identifying clusters of alternative polyadenylation events and tails (4)Statistical analysis of polyA tail length changes (5)Differential Expression Analysis of Poly(A) Sites
 ## 3.1  Minimap2 alignment and filtering on the reads.(optional)
@@ -279,16 +282,33 @@ These functions compute a proportional difference (pd) and a correlation‑based
 apa_results <- Quantify.GeneAPA(QpolyA,
                                 colData = sample_metadata,
                                 contrast = c("condition", "Control", "Treatment"))
+compute_gene_RPP(polyA, sample_names,
+                 type_col = "type",
+                 gene_id_col = "gene_id",
+                 strand_col = "strand",
+                 center_col = "center")
+compute_delta_RPP(gene_RPP, colData, control_cond, treat_cond)
 ```
+
 #### Arguments
 ```
 QpolyA:                   A QuantifyPolyA object with annotated PACs.
 colData:                  A data.frame with sample metadata, must include a `condition` column.
 contrast:                 A three‑element vector: c(column, control_group, treatment_group).
+polyA	                    Data frame containing APA site information. Must include sample columns (names in sample_names), plus columns for type, gene_id, strand, center. Row names should be unique site IDs.
+sample_names	            Character vector of sample names (must be column names in polyA).
+type_col	                Name of the column containing site type (default: "type").
+gene_id_col	              Name of the column containing gene identifier (default: "gene_id").
+strand_col	              Name of the column containing strand information (default: "strand").
+center_col	              Name of the column containing genomic center position (default: "center").
+polyA_rank	              Data frame containing gene-level RPP scores (output of compute_gene_RPP). Must have a gene_id column and sample columns matching row names in colData.
+colData	                  Data frame with sample metadata. Row names must be sample names, and it must contain a condition column specifying group membership.
+control_cond	            Character string, the name of the control condition as it appears in colData$condition.
+treat_cond	              Character string, the name of the treatment condition as it appears in colData$condition.
 ```
 #### Output
 ```
-A tibble with columns: gene_id, pd, r, p.value.
+A tibble with columns: gene_id, pd, delta_RPP, p.value.
 ```
 
 # 4. Application of APPLE
@@ -380,15 +400,26 @@ colData = data.frame(
   type = as.factor('single')
 )
 rownames(colData) = sample_names
+res = DESeq2.PolyA(QpolyA,colData)
 ```
 
 ### 10) Dynamic Analysis of APA at Gene Level
 ```
+library(DEXSeq)
 sample_names <- c("NC-1", "NC-2","Fip1-1", "Fip1-2","Fip2-1","Fip2-2")
-conditions <-c("NC", "NC","Fip1", "Fip1","Fip2","Fip2")
-colData = data.frame(
-  condition = as.factor(conditions),
-  type = as.factor('single')
-)
-rownames(colData) = sample_names
+gene_RPP=compute_gene_RPP(polyA, sample_names,
+                 type_col = "type",
+                 gene_id_col = "gene_id",
+                 strand_col = "strand",
+                 center_col = "center")
+DEAPA_gene = c()
+for (i in c('Fip1','Fip2')) {
+  tmp =  Quantify.GeneAPA(QpolyA,colData,contrast=c("condition","NC",i))
+  tmp_delta_RPP = compute_delta_RPP(gene_RPP, colData, control_cond, treat_cond)
+  tmp = left_join(tmp,tmp_delta_RPP)
+
+  tmp$contrast = paste0(c(i,"NC"),collapse = ' v.s. ')
+  DEAPA_gene = rbind(DEAPA_gene,tmp)
+}
+
 ```
