@@ -374,13 +374,39 @@ apa_results <- dplyr::left_join(apa_results, delta_RPP, by = "gene_id")
 
 ```
 
-| Function | Inputs | Output |
-| --- | --- | --- |
-| Quantify.GeneAPA() | Annotated QpolyA, sample metadata, and contrast | gene_id, pd, r, p.value |
-| compute_gene_RPP() | PAC data frame and sample column names | gene_id and one RPP column per sample |
-| compute_delta_RPP() | RPP table, sample metadata, and condition names | gene_id and delta_RPP |
+#### Arguments
+```
+QpolyA                    A QuantifyPolyA object containing annotated PACs.
+colData                   Sample metadata; row names must match sample count columns.
+                          Must contain a condition column.
+contrast                  c(column, control_group, treatment_group).
+polyA                     PAC data frame, typically QpolyA@polyA.
+sample_names              Names of the sample count columns in polyA.
+type_col                  PAC annotation column, default "type".
+gene_id_col               Gene identifier column, default "gene_id".
+strand_col                Strand column, default "strand".
+center_col                PAC center coordinate column, default "center".
+polyA_rank                Gene-level RPP table returned by compute_gene_RPP().
+control_cond              Control condition name in colData$condition.
+treat_cond                Treatment condition name in colData$condition.
+```
 
-The row names of sample metadata must match count-column names. compute_gene_RPP() expects type, gene_id, strand, and center columns by default; these names can be changed through type_col, gene_id_col, strand_col, and center_col. Its default filtering also excludes intergenic PACs and genes with fewer than two PACs.
+#### Output
+```
+Quantify.GeneAPA()
+  One row per gene with columns: gene_id, pd, r, p.value.
+
+compute_gene_RPP()
+  One row per gene with gene_id and one RPP column per sample.
+
+compute_delta_RPP()
+  One row per gene with columns: gene_id, delta_RPP.
+
+After joining by gene_id
+  Columns: gene_id, pd, r, p.value, delta_RPP.
+```
+
+compute_gene_RPP() excludes intergenic PACs and genes with fewer than two retained PACs.
 
 #### Poly(A) site usage (PSU)
 
@@ -407,9 +433,9 @@ $$
 
 $c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAC.
 
-#### Relative poly(A) position (RPP)
+#### RPP
 
-RPP summarizes proximal versus distal PAC usage. PACs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
+Relative poly(A) position (RPP) summarizes proximal versus distal PAC usage. PACs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
 
 $$
 w_{g,k}=\frac{k-1}{K_g-1},
@@ -419,9 +445,9 @@ $$
 
 The implementation uses percent_rank(), so tied centers share a rank. With positive sample totals, RPP ranges from 0 to 1. Larger values indicate more distal usage; smaller values indicate more proximal usage. RPP is a **rank-weighted position score**, not a physical length in nucleotides.
 
-#### Change in RPP
+#### Delta RPP
 
-compute_delta_RPP() subtracts the control-group mean RPP from the treatment-group mean:
+The change in relative poly(A) position is reported as delta_RPP. compute_delta_RPP() subtracts the control-group mean RPP from the treatment-group mean:
 
 $$
 \Delta\mathrm{RPP}_g =
