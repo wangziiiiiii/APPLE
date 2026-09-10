@@ -23,7 +23,7 @@ APPLE is a comprehensive R package designed to analyze poly(A) tail lengths and 
 Poly(A) tail length and alternative polyadenylation are key regulatory factors governing mRNA stability, translation, and localization. With advancements in 3' end sequencing technologies—such as PAT-seq, PAL-seq, and FLAM-seq—it is now possible to capture site-level information regarding poly(A) tail lengths and polyadenylation site usage. APPLE provides an integrated pipeline for processing such data; it identifies polyadenylation site clusters (PACs) and calculates their usage rates using a density peak clustering algorithm, and performs tail-length analyses on individual reads using statistical tests including the t-test, Wilcoxon test test, and linear mixed models.
 
 # 2. Installation of APPLE package
-APPLE relies on certain tools which are exclusive to the Linux environment. Therefore, it is advisable to install and utilize scDAPA2 within a Linux setting.
+APPLE relies on certain tools which are exclusive to the Linux environment. Therefore, it is advisable to install and utilize APPLE within a Linux setting.
 ### [1]. Install dependencies
 **Install standalone tools:** \
 samtools (>=1.17), bedtools, minimap2(optional)
@@ -55,14 +55,14 @@ if (!require("readr")) BiocManager::install("readr")
 if (!require("stringr")) BiocManager::install("stringr")
 ```
 
-### [2]. Install scDAPA2
+### [2]. Install APPLE
 ```         
 install.packages('devtools')
-devtools::install_github("wangziiiiiii/APPLE")
+devtools::install_github("wangziiiiiii/APPLE.R")
 ```
 Note: We have enabled automatic installation of dependencies within this R package.
 
-# 3. Workflow of scDAPA2
+# 3. Workflow of APPLE
 The essential functions of APPLE include: (1) Minimap2 alignment and filtering on the reads.(optional) (2) Extracting polyAsite and detect polyA tail (3) Identifying clusters of alternative polyadenylation events and tails (4)Statistical analysis of polyA tail length changes (5)Differential Expression Analysis of Poly(A) Sites
 ## 3.1  Minimap2 alignment and filtering on the reads.(optional)
 APPLE provides a wrapper function minimap2() that runs minimap2 on FASTQ files, filters reads by SAM flags, and sorts the output.
@@ -380,6 +380,7 @@ result <- polyAlength(
   control_group = "NC",
   logscale = TRUE,
   mc.cores = 4
+)
 ```
 
 (2) Principal Component Analysis (PCA) on tail length matrices
