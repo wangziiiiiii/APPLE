@@ -1,6 +1,6 @@
 # APPLE.R
 
-**Version 1.0**
+![Version 1.0](docs/images/version-1.0.svg)
 
 *Analysis of poly(A) tail lengths and alternative polyadenylation in R.*
 
@@ -80,6 +80,10 @@ The package declares R dependencies in DESCRIPTION; external executables must be
 ## 3. Workflow
 
 Follow steps 3.1–3.3 to prepare annotated PACs, then use tail-length analysis, differential PAC count analysis, or gene-level APA analysis as appropriate for your question.
+
+[![APPLE workflow: sequencing and preprocessing, read alignment, software modules, and main outputs](docs/images/apple-workflow.jpg)](docs/images/apple-workflow.jpg)
+
+*Overview of the APPLE workflow. Click the image to view it at full size.*
 
 ### 3.1 Read alignment
 
