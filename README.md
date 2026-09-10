@@ -98,12 +98,13 @@ sam_files <- minimap2(reference = "/path/to/genome.fa",
 ```
 
 #### Arguments
-```
-reference                 Reference genome file path
-work_dir                  Working directory path containing fq files
-threads                   Number of threads for minimap2, default is 4
-filter_flags              SAM flags to filter out, default is 2308
-```
+
+| Parameter | Description |
+| --- | --- |
+| `reference` | Reference genome file path |
+| `work_dir` | Working directory path containing fq files |
+| `threads` | Number of threads for minimap2, default is 4 |
+| `filter_flags` | SAM flags to filter out, default is 2308 |
 
 ### 3.2 Site and tail extraction
 
@@ -124,14 +125,15 @@ results <- Extract_polyAsite(work_dir = "/path/to/sam/",
 ```
 
 #### Arguments
-```
-work_dir                  Working directory containing SAM files
-intron_max                Maximum intron size, default is 50000
-min_tail_length           Minimum polyA tail length to consider, default is 6
-sample_size               Number of lines to sample for pt tag detection, default is 1000
-bedtools_path             Path to bedtools executable, default is "bedtools"
-remove_temp_files         Whether to remove temporary files, default is FALSE
-```
+
+| Parameter | Description |
+| --- | --- |
+| `work_dir` | Working directory containing SAM files |
+| `intron_max` | Maximum intron size, default is 50000 |
+| `min_tail_length` | Minimum polyA tail length to consider, default is 6 |
+| `sample_size` | Number of lines to sample for pt tag detection, default is 1000 |
+| `bedtools_path` | Path to bedtools executable, default is "bedtools" |
+| `remove_temp_files` | Whether to remove temporary files, default is FALSE |
 
 ### 3.3 PAC identification and annotation
 
@@ -148,15 +150,17 @@ QpolyA <- Load.PolyA(dir = "/path/to/bed/")
 ```
 
 #### Arguments
-```
-files                     Optional vector of existing file paths; if supplied, dir is not prepended.
-dir                       Directory to scan for .bed files when files is omitted.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `files` | Optional vector of existing file paths; if supplied, dir is not prepended. |
+| `dir` | Directory to scan for .bed files when files is omitted. |
 
 #### Output
-```
-A QuantifyPolyA object containing raw poly(A) site information in the @pre.polyA slot and tail length information in @tail_lengths.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | A QuantifyPolyA object containing raw poly(A) site information in the @pre.polyA slot and tail length information in @tail_lengths. |
 
 #### 3.3.2 Weighted density peak clustering
 
@@ -169,16 +173,18 @@ QpolyA <- Cluster.PolyA(QpolyA, max.gapwidth = 24, mc.cores = 4)
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object containing clean poly(A) sites.
-max.gapwidth              Maximum distance between two adjacent sites in a PAC, default 24.
-mc.cores                  Number of cores for parallel clustering, default 4.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object containing clean poly(A) sites. |
+| `max.gapwidth` | Maximum distance between two adjacent sites in a PAC, default 24. |
+| `mc.cores` | Number of cores for parallel clustering, default 4. |
 
 #### Output
-```
-An updated QuantifyPolyA object with PAC information stored in @polyA. Clusters that were split are recorded in @split.clusters.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | An updated QuantifyPolyA object with PAC information stored in @polyA. Clusters that were split are recorded in @split.clusters. |
 
 #### 3.3.3 Feature annotation and APA quantification
 
@@ -191,15 +197,17 @@ QpolyA <- Annotate.PolyA(QpolyA, gff = "/path/to/annotation.gtf")
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object with PACs.
-gff                       A genome annotation file in GFF or GTF format (GTF recommended).
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object with PACs. |
+| `gff` | A genome annotation file in GFF or GTF format (GTF recommended). |
 
 #### Output
-```
-An updated QuantifyPolyA object where the @polyA data frame includes additional columns: gene_id, distance, and type.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | An updated QuantifyPolyA object where the @polyA data frame includes additional columns: gene_id, distance, and type. |
 
 #### 3.3.4 Filter low-confidence PolyA Clusters
 
@@ -212,16 +220,18 @@ QpolyA <- Filter.PolyA(QpolyA, min_count = 10, min_sample = 1)
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object with annotated PACs.
-min_count                 Minimum read count in a PAC, default 10.
-min_sample                Minimum number of samples with `min_count` reads, default 1.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object with annotated PACs. |
+| `min_count` | Minimum read count in a PAC, default 10. |
+| `min_sample` | Minimum number of samples with `min_count` reads, default 1. |
 
 #### Output
-```
-A filtered QuantifyPolyA object. PACs not meeting criteria are removed from @polyA.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | A filtered QuantifyPolyA object. PACs not meeting criteria are removed from @polyA. |
 
 #### 3.3.5 Map tail lengths to PolyA Clusters
 
@@ -234,15 +244,17 @@ QpolyA <- mapTail(QpolyA, delimiter = ";")
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object with PACs defined.
-delimiter                 Delimiter used to separate tail lengths in the output, default ";".
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object with PACs defined. |
+| `delimiter` | Delimiter used to separate tail lengths in the output, default ";". |
 
 #### Output
-```
-A QuantifyPolyA object with tail length information mapped to clusters in the @cluster_tail_lengths slot. Each entry is a data frame containing columns: cluster_id, seqnames, start, end, strand, and all_tail_lengths.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | A QuantifyPolyA object with tail length information mapped to clusters in the @cluster_tail_lengths slot. Each entry is a data frame containing columns: cluster_id, seqnames, start, end, strand, and all_tail_lengths. |
 
 ### 3.4 Tail-length analysis
 
@@ -265,24 +277,24 @@ results <- polyAlength(QpolyA,
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object with cluster tail lengths.
-sample_info               A data.frame with columns `sample`, `condition`, and optionally `lib_id`.
-test_methods              Vector of tests to perform: "t_test", "wilcoxon", "lmm".
-min_mRNA_per_condition    Minimum number of mRNA molecules per condition for a PAC to be tested.
-logscale                  Whether to log2‑transform tail lengths before testing.
-control_group             Name of the control condition (must match values in `sample_info$condition`).
-mc.cores                  Number of cores for parallel processing.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object with cluster tail lengths. |
+| `sample_info` | A data.frame with columns `sample`, `condition`, and optionally `lib_id`. |
+| `test_methods` | Vector of tests to perform: "t_test", "wilcoxon", "lmm". |
+| `min_mRNA_per_condition` | Minimum number of mRNA molecules per condition for a PAC to be tested. |
+| `logscale` | Whether to log2‑transform tail lengths before testing. |
+| `control_group` | Name of the control condition (must match values in `sample_info$condition`). |
+| `mc.cores` | Number of cores for parallel processing. |
 
 #### Output
-```
-A data frame (wide format) with one row per PAC, containing:
 
-(1) Summary statistics for control and each treatment (mean, median, sd, n).
-
-(2) Test statistics, p‑values, and q‑values (FDR) for each test method.
-```
+| Output | Description |
+| --- | --- |
+| Result data frame | One row per PAC, in wide format. |
+| Summary statistics | Control and treatment means, medians, standard deviations, and observation counts. |
+| Test results | Test statistics, P values, and BH-adjusted q values for each test method and treatment. |
 
 #### 3.4.2 Principal Component Analysis (PCA) on tail length matrices
 
@@ -300,20 +312,22 @@ pca_data <- tail_pca(QpolyA, sample_info,
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object that has been processed through clustering and tail length mapping.
-sample_info               A data.frame with sample metadata. Must contain columns `sample` and `condition`
-aggregation_method        Method to aggregate tail lengths per PAC: either "mean" or "median". Default is "mean".
-max_missing               Maximum allowed proportion of missing values per PAC. PACs with more missing values are removed. Default is 0.2.
-impute_method             Method to handle remaining missing values: "mean" (impute with column mean), "knn" (k‑nearest neighbours, requires `impute` package), or "remove" (remove samples with any missing). Default is "mean".
-scale                     Logical; whether to scale variables to unit variance before PCA. Default is TRUE.
-center                    Logical; whether to center variables to zero mean before PCA. Default is TRUE.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object that has been processed through clustering and tail length mapping. |
+| `sample_info` | A data.frame with sample metadata. Must contain columns `sample` and `condition` |
+| `aggregation_method` | Method to aggregate tail lengths per PAC: either "mean" or "median". Default is "mean". |
+| `max_missing` | Maximum allowed proportion of missing values per PAC. PACs with more missing values are removed. Default is 0.2. |
+| `impute_method` | Method to handle remaining missing values: "mean" (impute with column mean), "knn" (k‑nearest neighbours, requires `impute` package), or "remove" (remove samples with any missing). Default is "mean". |
+| `scale` | Logical; whether to scale variables to unit variance before PCA. Default is TRUE. |
+| `center` | Logical; whether to center variables to zero mean before PCA. Default is TRUE. |
 
 #### Output
-```
-A data frame containing PCA coordinates for each sample (columns PC1, PC2, …), merged with the provided sample_info metadata. The returned object also has attributes variance_explained and cumulative_variance storing the percentage of variance explained by each principal component.
-```
+
+| Output | Description |
+| --- | --- |
+| Returned object | A data frame containing PCA coordinates for each sample (columns PC1, PC2, …), merged with the provided sample_info metadata. The returned object also has attributes variance_explained and cumulative_variance storing the percentage of variance explained by each principal component. |
 
 ### 3.5 Differential PAC counts
 
@@ -331,21 +345,19 @@ results <- DESeq2.PolyA(QpolyA, colData)
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object containing PAC counts in the `@polyA` slot. PACs must have been filtered and annotated.
-colData                   A data.frame with sample metadata. Row names must match the sample names in `QpolyA@sample_names`, and must include a column named `condition` specifying the experimental groups.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object containing PAC counts in the `@polyA` slot. PACs must have been filtered and annotated. |
+| `colData` | A data.frame with sample metadata. Row names must match the sample names in `QpolyA@sample_names`, and must include a column named `condition` specifying the experimental groups. |
 
 #### Output
-```
-A list containing three elements:
 
-(1) DESeq2.Result: The DESeq2 DESeqDataSet object after running DESeq().
-
-(2) PCA.Plot: A PCA plot generated by factoextra::fviz_pca_ind(), colored by experimental condition.
-
-(3) UMAP.Plot: A UMAP plot generated by uwot::umap(), colored by experimental condition.
-```
+| Output | Description |
+| --- | --- |
+| `DESeq2.Result` | DESeqDataSet after running DESeq(). |
+| `PCA.Plot` | PCA plot from factoextra::fviz_pca_ind(), colored by condition. |
+| `UMAP.Plot` | UMAP plot based on uwot::umap(), colored by condition. |
 
 ### 3.6 Gene-level APA analysis
 
@@ -375,36 +387,30 @@ apa_results <- dplyr::left_join(apa_results, delta_RPP, by = "gene_id")
 ```
 
 #### Arguments
-```
-QpolyA                    A QuantifyPolyA object containing annotated PACs.
-colData                   Sample metadata; row names must match sample count columns.
-                          Must contain a condition column.
-contrast                  c(column, control_group, treatment_group).
-polyA                     PAC data frame, typically QpolyA@polyA.
-sample_names              Names of the sample count columns in polyA.
-type_col                  PAC annotation column, default "type".
-gene_id_col               Gene identifier column, default "gene_id".
-strand_col                Strand column, default "strand".
-center_col                PAC center coordinate column, default "center".
-polyA_rank                Gene-level RPP table returned by compute_gene_RPP().
-control_cond              Control condition name in colData$condition.
-treat_cond                Treatment condition name in colData$condition.
-```
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object containing annotated PACs. |
+| `colData` | Sample metadata; row names must match sample count columns. Must contain a condition column. |
+| `contrast` | c(column, control_group, treatment_group). |
+| `polyA` | PAC data frame, typically QpolyA@polyA. |
+| `sample_names` | Names of the sample count columns in polyA. |
+| `type_col` | PAC annotation column, default "type". |
+| `gene_id_col` | Gene identifier column, default "gene_id". |
+| `strand_col` | Strand column, default "strand". |
+| `center_col` | PAC center coordinate column, default "center". |
+| `polyA_rank` | Gene-level RPP table returned by compute_gene_RPP(). |
+| `control_cond` | Control condition name in colData$condition. |
+| `treat_cond` | Treatment condition name in colData$condition. |
 
 #### Output
-```
-Quantify.GeneAPA()
-  One row per gene with columns: gene_id, pd, r, p.value.
 
-compute_gene_RPP()
-  One row per gene with gene_id and one RPP column per sample.
-
-compute_delta_RPP()
-  One row per gene with columns: gene_id, delta_RPP.
-
-After joining by gene_id
-  Columns: gene_id, pd, r, p.value, delta_RPP.
-```
+| Output | Description |
+| --- | --- |
+| `Quantify.GeneAPA()` | One row per gene: gene_id, pd, r, p.value. |
+| `compute_gene_RPP()` | One row per gene: gene_id and one RPP column per sample. |
+| `compute_delta_RPP()` | One row per gene: gene_id, delta_RPP. |
+| Joined result | gene_id, pd, r, p.value, delta_RPP. |
 
 compute_gene_RPP() excludes intergenic PACs and genes with fewer than two retained PACs.
 
@@ -412,10 +418,10 @@ compute_gene_RPP() excludes intergenic PACs and genes with fewer than two retain
 
 For gene $g$, PAC $k$, and sample $s$, define usage as:
 
-$$
+```math
 P_{g,s,k} = \mathrm{PSU}_{g,s,k}
 = \frac{n_{g,s,k}}{\sum_{\ell=1}^{K_g} n_{g,s,\ell}}
-$$
+```
 
 Here, $n$ is the PAC read count and $K_g$ is the number of retained PACs in the gene. With a positive gene total, usage proportions sum to 1 within each sample.
 
@@ -423,13 +429,13 @@ Here, $n$ is the PAC read count and $K_g$ is the number of retained PACs in the 
 
 PD measures the magnitude of the change in PAC usage. For each control–treatment replicate pair, the code sums absolute usage differences across PACs and divides by two. It then averages over all cross-condition replicate pairs:
 
-$$
+```math
 \mathrm{PD}_g =
 \frac{1}{c_C c_T}
 \sum_{i=1}^{c_C}\sum_{j=1}^{c_T}
 \frac{1}{2}\sum_{k=1}^{K_g}
 \left|P_{g,C_i,k}-P_{g,T_j,k}\right|
-$$
+```
 
 $c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAC.
 
@@ -437,11 +443,11 @@ $c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, 
 
 Relative poly(A) position (RPP) summarizes proximal versus distal PAC usage. PACs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
 
-$$
+```math
 w_{g,k}=\frac{k-1}{K_g-1},
 \qquad
 \mathrm{RPP}_{g,s}=\sum_{k=1}^{K_g}w_{g,k}P_{g,s,k}
-$$
+```
 
 The implementation uses percent_rank(), so tied centers share a rank. With positive sample totals, RPP ranges from 0 to 1. Larger values indicate more distal usage; smaller values indicate more proximal usage. RPP is a **rank-weighted position score**, not a physical length in nucleotides.
 
@@ -449,12 +455,11 @@ The implementation uses percent_rank(), so tied centers share a rank. With posit
 
 The change in relative poly(A) position is reported as delta_RPP. compute_delta_RPP() subtracts the control-group mean RPP from the treatment-group mean:
 
-$$
+```math
 \Delta\mathrm{RPP}_g =
 \frac{1}{c_T}\sum_{j=1}^{c_T}\mathrm{RPP}_{g,T_j}
--
-\frac{1}{c_C}\sum_{i=1}^{c_C}\mathrm{RPP}_{g,C_i}
-$$
+- \frac{1}{c_C}\sum_{i=1}^{c_C}\mathrm{RPP}_{g,C_i}
+```
 
 | Result | Interpretation |
 | --- | --- |
