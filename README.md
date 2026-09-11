@@ -1,4 +1,4 @@
-# APPLE.R
+<h1><img src="docs/images/apple-wordmark.svg" alt="APPLE.R" width="450"></h1>
 
 ![Version 1.0](docs/images/version-1.0.svg)
 
