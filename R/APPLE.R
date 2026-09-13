@@ -557,6 +557,11 @@ Load.PolyA <- function(files,dir){
   for (i in 1:length(files)) {
     data = read.table(file = files[i],sep = '\t',stringsAsFactors = FALSE)
 
+    # Chromosome and strand identifiers are labels, even when a BED subset
+    # contains only numeric chromosome names (for example, chromosome 22).
+    data[[1]] = as.character(data[[1]])
+    data[[2]] = as.character(data[[2]])
+
     # Check if the file has 6 columns (new format with tail lengths)
     if (ncol(data) == 6) {
       colnames(data) = c('seqnames','strand','coord','score','five_prime_end','tail_lengths')
@@ -884,6 +889,11 @@ is.internal.priming <- function(polyA,fasta,flank_len=15,win_size=10,min_A=8){
   # Get info of fasta file
   fai = read.table(file = paste0(fasta,'.fai'))
   colnames(fai) = c('chr','len','offset','linebase','linewidth')
+
+  # Keep join keys type-stable for BED subsets containing numeric-only
+  # chromosome names and FASTA indexes that also contain X, Y, or MT.
+  seq.bed$chr = as.character(seq.bed$chr)
+  fai$chr = as.character(fai$chr)
   
   # Check for valid regions i.e. start < 0 or end > seq.len
   seq.bed = left_join(seq.bed,fai[,c(1,2)], by='chr')
@@ -2531,3 +2541,4 @@ summarize_mRNA_level_results_multi <- function(results, alpha = 0.05, control_gr
 #' @importFrom data.table := uniqueN
 #' @importFrom rlang .data
 "_PACKAGE"
+
