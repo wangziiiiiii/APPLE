@@ -38,7 +38,7 @@ dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 cores <- if (.Platform$OS.type == "windows") 1L else 4L
 
 control_group <- "NC"
-treatment_groups <- c("Fip1", "Fip2")
+treatment_groups <- c("EX1", "EX2")
 
 # Load, clean, cluster, annotate, filter, and map tail lengths.
 bed_files <- list.files(bed_dir, pattern = "\\.bed$", full.names = TRUE)

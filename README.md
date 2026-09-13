@@ -24,8 +24,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.5 Differential PAC counts](#35-differential-pac-counts)
   - [3.6 Gene-level APA analysis](#36-gene-level-apa-analysis)
 - [4. Worked example](#4-worked-example)
-  - [4.1 Example result tables](#41-example-result-tables)
-  - [4.2 Example figures](#42-example-figures)
+  - [4.1 Example figures](#41-example-figures)
 
 ## 1. Introduction
 
@@ -285,7 +284,7 @@ results <- Tail.DiffPair(
   QpolyA,
   sample_info = sample_metadata,
   control_group = "NC",
-  treatment_group = "Fip1",
+  treatment_group = "EX1",
   test_method = "t_test",
   min_mRNA_per_condition = 10,
   logscale = TRUE,
@@ -508,13 +507,13 @@ The example screening rule **pd > 0.1 and p.value < 0.05** can be applied explic
 
 ## 4. Worked example
 
-This worked example uses six bundled chromosome 22 BED files: two NC controls, two Fip1 samples, and two Fip2 samples. Each file retains complete site counts and tail-length lists from the same genomic region, allowing the core workflow and pairwise comparisons to be demonstrated without downloading the original FASTQ files.
+This worked example uses six bundled chromosome 22 BED files: two NC controls, two EX1 samples, and two EX2 samples. Each file retains complete site counts and tail-length lists from the same genomic region, allowing the core workflow and pairwise comparisons to be demonstrated without downloading the original FASTQ files.
 
 | Group | Replicates | Approximate reads per file |
 | --- | ---: | ---: |
 | NC | 2 | 101,000-109,000 |
-| Fip1 | 2 | 126,000-128,000 |
-| Fip2 | 2 | 102,000-104,000 |
+| EX1 | 2 | 126,000-128,000 |
+| EX2 | 2 | 102,000-104,000 |
 
 The BED files are installed with APPLE under `inst/extdata/chr22`. Internal-priming removal and annotation still require the complete GRCh38 primary-assembly FASTA and matching Ensembl release 113 GTF. Chromosome names must agree between the BED, FASTA, and GTF files; this example uses names such as `22`, `X`, and `MT` without a `chr` prefix.
 
@@ -569,7 +568,7 @@ QpolyA <- Map.Tail(QpolyA)
 
 #### Define the experimental groups
 
-`Load.PolyA()` derives each sample name from its BED filename. The following code converts `NC-1`, `Fip1-2`, and similar names into their condition labels.
+`Load.PolyA()` derives each sample name from its BED filename. The following code converts `NC-1`, `EX1-2`, and similar names into their condition labels.
 
 ```r
 sample_names <- QpolyA@sample_names
@@ -585,7 +584,7 @@ sample_info <- data.frame(
 colData <- data.frame(
   condition = factor(
     conditions,
-    levels = c("NC", "Fip1", "Fip2")
+    levels = c("NC", "EX1", "EX2")
   ),
   row.names = sample_names
 )
@@ -596,7 +595,7 @@ colData <- data.frame(
 The supplied analysis used raw tail lengths, a minimum of 10 mRNA observations per condition, and thresholds of `q_value < 0.05` and an absolute mean difference greater than 15 nt. These are example screening thresholds rather than universal defaults.
 
 ```r
-tail_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
+tail_results <- lapply(c("EX1", "EX2"), function(treatment) {
   pair_info <- sample_info[
     sample_info$condition %in% c("NC", treatment),
     ,
@@ -625,7 +624,7 @@ tail_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
   )
   result
 })
-names(tail_results) <- c("Fip1", "Fip2")
+names(tail_results) <- c("EX1", "EX2")
 ```
 
 #### Explore tail-length variation
@@ -653,7 +652,7 @@ gene_RPP <- compute_gene_RPP(
   sample_names = sample_names
 )
 
-apa_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
+apa_results <- lapply(c("EX1", "EX2"), function(treatment) {
   apa <- Quantify.GeneAPA(
     QpolyA,
     colData,
@@ -675,7 +674,7 @@ apa_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
 DEAPA_gene <- dplyr::bind_rows(apa_results)
 ```
 
-The complete reproducible script also calculates DEXSeq gene-level adjusted P values and PAS-level usage changes, writes the four result tables, and saves the figures with descriptive filenames. It requires the optional Bioconductor packages `DEXSeq` and `BiocParallel`:
+The complete reproducible script also calculates DEXSeq gene-level adjusted P values and PAS-level usage changes, and saves its outputs with descriptive filenames. It requires the optional Bioconductor packages `DEXSeq` and `BiocParallel`:
 
 ```r
 BiocManager::install(c("DEXSeq", "BiocParallel"))
@@ -692,18 +691,7 @@ source("chr22_worked_example.R")
 
 The script is also available directly at [inst/examples/chr22_worked_example.R](inst/examples/chr22_worked_example.R). Edit the two reference paths at the beginning before running it. Outputs are written to a new `APPLE-example-output` directory, so the bundled example files remain unchanged.
 
-### 4.1 Example result tables
-
-| File | Rows | Contents |
-| --- | ---: | --- |
-| [DEAPA_gene.csv](docs/example-results/DEAPA_gene.csv) | 222 | Gene-level PD, correlation, adjusted P value, delta RPP, and annotation |
-| [DEAPA_PAS.csv](docs/example-results/DEAPA_PAS.csv) | 562 | PAS-level DEXSeq statistics, delta PSU, and annotation |
-| [polyA_tail_diff.NC_Fip1.tsv](docs/example-results/polyA_tail_diff.NC_Fip1.tsv) | 453 | NC versus Fip1 tail-length statistics |
-| [polyA_tail_diff.NC_Fip2.tsv](docs/example-results/polyA_tail_diff.NC_Fip2.tsv) | 434 | NC versus Fip2 tail-length statistics |
-
-The CSV files were saved without R row-number columns. The TSV files contain one row per tested PAC and include raw-scale descriptive statistics, effect sizes, P values, BH-adjusted q values, and the example significance category.
-
-### 4.2 Example figures
+### 4.1 Example figures
 
 <table>
 <tr>
@@ -711,12 +699,12 @@ The CSV files were saved without R row-number columns. The TSV files contain one
 <td align="center" width="50%"><img src="docs/images/example/tail-pca.png" alt="Poly(A) tail length PCA"><br><b>Tail-length PCA</b></td>
 </tr>
 <tr>
-<td align="center" width="50%"><img src="docs/images/example/tail-diff-fip1.png" alt="NC versus Fip1 tail-length volcano plot"><br><b>NC versus Fip1</b></td>
-<td align="center" width="50%"><img src="docs/images/example/tail-diff-fip2.png" alt="NC versus Fip2 tail-length volcano plot"><br><b>NC versus Fip2</b></td>
+<td align="center" width="50%"><img src="docs/images/example/tail-diff-ex1.png" alt="NC versus EX1 tail-length volcano plot"><br><b>NC versus EX1</b></td>
+<td align="center" width="50%"><img src="docs/images/example/tail-diff-ex2.png" alt="NC versus EX2 tail-length volcano plot"><br><b>NC versus EX2</b></td>
 </tr>
 </table>
 
-Additional figures: [DEAPA gene counts](docs/images/example/deapa-gene-counts.png), [differential PAS counts](docs/images/example/deapa-pas-counts.png), [tail-length density](docs/images/example/tail-density.png), and [tail-length significance groups](docs/images/example/tail-significance-groups.png).
 
-With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for Fip1 versus NC, and 15 distal and 2 proximal genes for Fip2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PACs for Fip1, and 5 lengthening and 3 shortening PACs for Fip2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for EX1 versus NC, and 15 distal and 2 proximal genes for EX2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PACs for EX1, and 5 lengthening and 3 shortening PACs for EX2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+
 
