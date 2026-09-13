@@ -1,26 +1,3 @@
-if (!require("tools")) install.packages("tools")
-if (!require("bedr")) install.packages("bedr")
-if (!require("stringr")) install.packages("stringr")
-if (!require("outliers")) install.packages("outliers")
-if (!require("dplyr")) install.packages("dplyr")
-if (!require("tidyr")) install.packages("tidyr")
-if (!require("matrixStats")) install.packages("matrixStats")
-if (!require("pbmcapply")) install.packages("pbmcapply")
-if (!require("FactoMineR")) install.packages("FactoMineR")
-if (!require("factoextra")) install.packages("factoextra")
-if (!require("ggplot2")) install.packages("ggplot2")
-if (!require("uwot")) install.packages("uwot")
-if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-if (!require("plyranges")) BiocManager::install("plyranges")
-if (!require("GenomicRanges")) BiocManager::install("GenomicRanges")
-if (!require("GenomicFeatures")) BiocManager::install("GenomicFeatures")
-if (!require("rtracklayer")) BiocManager::install("rtracklayer")
-if (!require("Rsamtools")) BiocManager::install("Rsamtools")
-if (!require("DESeq2")) BiocManager::install("DESeq2")
-if (!require("ggbio")) BiocManager::install("ggbio")
-if (!require("readr")) BiocManager::install("readr")
-if (!require("stringr")) BiocManager::install("stringr")
-
 ##############################################
 #           Data pre-processing            #
 ##############################################
@@ -136,8 +113,10 @@ Extract_polyAsite <- function(work_dir, intron_max = 50000, min_tail_length = 6,
     stop("Please install the 'stringr' package")
   }
 
-  library(readr)
-  library(stringr)
+
+  # 记录当前工作目录，函数退出时恢复
+  old_wd <- getwd()
+  on.exit(setwd(old_wd), add = TRUE)
 
   # Set working directory
   setwd(work_dir)
@@ -619,6 +598,46 @@ Load.PolyA <- function(files,dir){
   return(QpolyA)
 }
 
+
+##############################################
+#       Remove internal priming events       #
+##############################################
+#' @title Remove IP
+#' @description Remove poly(A) sites which potentially result from internal priming events.
+#' @name Remove.IP
+#' @param QpolyA A QuantifyPolyA object containing all raw poly(A) sites.
+#' @param fasta A string specifying the location and name of the corresponding genome file in FASTA format.
+#' @param flank_len An integer specifying the neighborhood to search for template polyA.
+#' @param win_size An integer specifying the size of the sliding window.
+#' @param min_A An integer specifying the minimum number of base A in a window.
+#' @return A QuantifyPolyA object containing poly(A) sites with IP removed.
+#' @export
+#'
+Remove.IP <- function(QpolyA,fasta,flank_len=15,win_size=10,min_A=8){
+  # Check parameters.
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!file.exists(fasta)) stop(paste('Fasta file',fasta,'does not exist!'))
+  if (!is.numeric(flank_len)) stop("'flank_len' is not a number!")
+  if (flank_len<=0) stop("'flank_len' should be larger than 0, the default value is 15!")
+  if (!is.numeric(win_size)) stop("'win_size' is not a number!")
+  if (win_size<=0) stop("'win_size' should be larger than 0, the default value is 10!")
+  if (!is.numeric(min_A)) stop("'min_A' is not a number!")
+  if (min_A<=0) stop("'min_A' should be larger than 0, the default value is 8!")
+  
+  # Remove internal priming events.
+  for (alt_name in QpolyA@sample_names) {
+    is.IP = is.internal.priming(QpolyA@pre.polyA[[alt_name]],fasta = fasta,flank_len,win_size,min_A)
+    print(paste(sum(is.IP),'internal priming events were found in sample', alt_name,'!'))
+    QpolyA@pre.polyA[[alt_name]] = QpolyA@pre.polyA[[alt_name]][!is.IP,]
+
+    if (alt_name %in% names(QpolyA@tail_lengths)) {
+      QpolyA@tail_lengths[[alt_name]] = QpolyA@tail_lengths[[alt_name]][!is.IP,]
+    }
+  }
+  return(QpolyA)
+}
+
+
 ##############################################
 #          Cluster poly(A) sites             #
 ##############################################
@@ -635,7 +654,7 @@ Load.PolyA <- function(files,dir){
 #'
 Cluster.PolyA <- function(QpolyA, max.gapwidth = 24, mc.cores = 4){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.numeric(max.gapwidth)) stop("'max.gapwidth' is not a number!")
   if (max.gapwidth<=0) stop("'max.gapwidth' should be larger than 0, the default value is 24!")
   if (!is.numeric(mc.cores)) stop("'mc.cores' is not a number!")
@@ -692,7 +711,7 @@ Cluster.PolyA <- function(QpolyA, max.gapwidth = 24, mc.cores = 4){
 ##############################################
 #' @title Map tail lengths to clusters
 #' @description Map poly(A) tail length information to PAS clusters
-#' @name mapTailLengthsToClusters
+#' @name Map.Tail
 #' @param QpolyA A QuantifyPolyA object containing clean poly(A) sites and PACs.
 #' @param delimiter The delimiter to use for tail lengths (default: ";")
 #' @return A QuantifyPolyA object with tail length information mapped to clusters.
@@ -701,7 +720,7 @@ Cluster.PolyA <- function(QpolyA, max.gapwidth = 24, mc.cores = 4){
 #' @importFrom dplyr group_by summarise
 #' @export
 #'
-mapTail <- function(QpolyA, delimiter = ";") {
+Map.Tail <- function(QpolyA, delimiter = ";") {
   cluster_tail_lengths <- list()
 
   clusters.gr <- GRanges(
@@ -776,7 +795,7 @@ mapTail <- function(QpolyA, delimiter = ";") {
 #'
 Annotate.PolyA <- function(QpolyA,gff,seq.levels=NA){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!file.exists(gff)) stop(paste('Annotation file',gff,'does not exist!'))
 
   # Annotate polyA sites
@@ -819,7 +838,7 @@ Annotate.PolyA <- function(QpolyA,gff,seq.levels=NA){
 #'
 Filter.PolyA <- function(QpolyA,min_count = 10,min_sample = 1){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.numeric(min_count)) stop("'min_count' is not a number!")
   if (min_count<=0) stop("'min_count' should be larger than 0, the default value is 10!")
   if (!is.numeric(min_sample)) stop("'min_sample' is not a number!")
@@ -830,16 +849,91 @@ Filter.PolyA <- function(QpolyA,min_count = 10,min_sample = 1){
   return(QpolyA)
 }
 
+
+##############################################
+#       Check internal priming events        #
+##############################################
+#' Check whether the poly(A) sites are resulted from internal priming artifacts or not.
+#' @name is.internal.priming
+#' @param polyA A data.frame containing the information of raw poly(A) sites.
+#' @param fasta A string specifies the location and name of genome file in FASTA format.
+#' @param flank_len An integer specifying the neighborhood to search for template polyA.
+#' @param win_size An integer specifying the size of the sliding window.
+#' @param min_A An integer specifying the minimum number of base A in a window.
+#' @return A logic vector indicates whether the poly(A) sites are resulted from internal priming artifacts or not.
+#' @importFrom dplyr left_join
+#' @importFrom bedr get.fasta
+#' @importFrom Rsamtools indexFa
+#' @importFrom stringr str_detect str_split
+#' @importFrom matrixStats rowCumsums
+#' @export
+#'
+is.internal.priming <- function(polyA,fasta,flank_len=15,win_size=10,min_A=8){
+  # Construct a data.frame to build a bed file for extracting sequences
+  seq.bed = data.frame(
+    chr = polyA$seqnames,
+    start = polyA$coord-flank_len,
+    end = polyA$coord+flank_len,
+    strand = polyA$strand,
+    stringsAsFactors = FALSE
+  )
+  
+  # Check index file of fasta file
+  if (!file.exists(paste0(fasta,'.fai'))) indexFa(fasta)
+  
+  # Get info of fasta file
+  fai = read.table(file = paste0(fasta,'.fai'))
+  colnames(fai) = c('chr','len','offset','linebase','linewidth')
+  
+  # Check for valid regions i.e. start < 0 or end > seq.len
+  seq.bed = left_join(seq.bed,fai[,c(1,2)], by='chr')
+  seq.bed$start[seq.bed$start<=0] = 1
+  idx = seq.bed$end>seq.bed$len
+  seq.bed$end[idx] = seq.bed$len[idx]
+  
+  # Sort
+  idx = order(seq.bed$chr,seq.bed$start,decreasing = FALSE)
+  seq.bed = seq.bed[idx,]
+  
+  # Extract sequences
+  seq.df = get.fasta(seq.bed,fasta = fasta,verbose = FALSE,check.chr = FALSE,check.sort = FALSE,check.valid = FALSE)
+  
+  # Check internal priming events
+  is.IP = rep(TRUE,nrow(seq.bed))
+  plus.idx = which(seq.bed$strand=='+')
+  minus.idx = which(seq.bed$strand=='-')
+  
+  is.IP[plus.idx] = str_detect(seq.df$sequence[plus.idx],'A{6,}')
+  is.IP[minus.idx] = str_detect(seq.df$sequence[minus.idx],'T{6,}')
+  
+  plus.chars = str_split(seq.df$sequence[plus.idx],'',simplify = T)=='A'
+  plus.chars = rowCumsums(plus.chars,na.rm=TRUE)
+  plus.chars = rowSums(cbind(plus.chars[,win_size],plus.chars[,(win_size+1):(2*flank_len)] - plus.chars[,1:(2*flank_len-win_size)])>=min_A,na.rm = TRUE)
+  
+  is.IP[plus.idx] = is.IP[plus.idx]|plus.chars
+  
+  minus.chars = str_split(seq.df$sequence[minus.idx],'',simplify = T)=='T'
+  minus.chars = rowCumsums(minus.chars,na.rm=TRUE)
+  minus.chars = rowSums(cbind(minus.chars[,win_size],minus.chars[,(win_size+1):(2*flank_len)] - minus.chars[,1:(2*flank_len-win_size)])>=min_A,na.rm = TRUE)
+  
+  is.IP[minus.idx] = is.IP[minus.idx]|minus.chars
+  
+  # return result
+  is.IP[idx] = is.IP
+  return(is.IP)
+}
+
+
 ##############################################
 #          construct genome ranges           #
 ##############################################
 #' Construct genomic ranges
 #' @name buildGenomicRanges
-#' @usage buildGenomicRanges(seqname,position,score,strand)
 #' @param seqname A vector containing the sequence (Chromosomes/Contigs) names of poly(A) sites.
 #' @param position A numeric vector containing the genomic positions of poly(A) sites.
 #' @param score A numeric vector containing the numbers of reads supporting each poly(A) site.
 #' @param strand A character vector containing the strand information of poly(A) sites.
+#' @param five_prime_end A numeric vector of read 5-prime coordinates.
 #' @return A Granges object.
 #' @export
 #'
@@ -866,7 +960,7 @@ buildGenomicRanges <- function(seqname,position,score,strand = '*',five_prime_en
 simpleCluster <- function(points.gr,max.gapwidth=24){
 
   # Cluster points by distance
-  range.gr = reduce(points.gr,min.gapwidth=max.gapwidth,with.revmap=T,ignore.strand=FALSE)
+  range.gr = GenomicRanges::reduce(points.gr,min.gapwidth=max.gapwidth,with.revmap=T,ignore.strand=FALSE)
 
   # Sum the score
   range.gr$score = sum(extractList(points.gr$score,range.gr$revmap))
@@ -889,9 +983,9 @@ simpleCluster <- function(points.gr,max.gapwidth=24){
 ##############################################
 #' Cluster the one-dimensional poly(A) sites into groups based on local density
 #' @name findPeaks
-#' @usage findPeaks(sub_pos,sub_wts,min_delta=24)
 #' @param sub_pos The genomic coordinates of poly(A) sites.
 #' @param sub_wts The numbers of reads support each poly(A) site in 'sub_pos'.
+#' @param sub_five_prime_end Read 5-prime coordinates corresponding to sub_pos.
 #' @param min_delta A cutoff to limit the minimum distance between two centers.
 #' @return A tibble object with five columns 'group', 'start', 'end', 'sum.wts', 'center'.
 #' @importFrom dplyr tibble %>% group_by summarise
@@ -906,7 +1000,7 @@ findPeaks <- function(sub_pos,sub_wts,sub_five_prime_end,min_delta=24){
   ND <- length(sub_pos)
 
   if(ND<=2){
-    res <- tibble(group=1,start=min(sub_pos),end=max(sub_pos),sum.wts=sum(sub_wts),center=sub_pos[which.max(sub_wts)])
+    res <- tibble(group=1,start=min(sub_pos),end=max(sub_pos),sum.wts=sum(sub_wts),center=sub_pos[which.max(sub_wts)],five_prime_end = round(median(sub_five_prime_end)))
     return(res)
   }
 
@@ -997,7 +1091,8 @@ findPeaks <- function(sub_pos,sub_wts,sub_five_prime_end,min_delta=24){
 #' @param gff A genome annotation file in GFF or GTF format, GTF format is recommended.
 #' @param seq.levels A character vector of the names of Chromosomes/Contigs. This parameter is useful when the Chromosomes/Contigs names in genome file (used for short reads mapping) and genome annotation file are not consistent.
 #' @return The polyA data.frame will be return with three additional columns 'gene_id', 'distance, 'type'.
-#' @importFrom GenomicFeatures makeTxDbFromGFF cds exons genes threeUTRsByTranscript fiveUTRsByTranscript
+#' @importFrom txdbmaker makeTxDbFromGFF
+#' @importFrom GenomicFeatures cds exons genes threeUTRsByTranscript fiveUTRsByTranscript
 #' @importFrom GenomicRanges GRanges findOverlaps follow distance
 #' @importFrom IRanges IRanges
 #' @importFrom S4Vectors countQueryHits aggregate
@@ -1011,7 +1106,7 @@ polyAsite.annotation <- function(polyA, gff, seq.levels=NA){
   polyA.gr = GRanges(seqnames = polyA$seqnames,ranges = IRanges(start = polyA$start, end = polyA$end),strand = polyA$strand)
 
   # import annotation info from GFF/GTF file
-  txdb = makeTxDbFromGFF(gff)
+  txdb =makeTxDbFromGFF(gff)
   if(!sum(is.na(seq.levels))){
     seqlevels(txdb) = seq.levels
   }
@@ -1112,6 +1207,7 @@ polyAsite.annotation <- function(polyA, gff, seq.levels=NA){
 
   idx = which(!(((polyA$gene_id==polyA$gene_id_2)&(polyA$type!='intergenic'))|(is.na(polyA$gene_id_2)&polyA$type=='intergenic')))
 
+  print('start refinement!')
   for (i in idx) {
     if(polyA$gene_id[i]==polyA$gene_id_2[i]){
       polyA$type[i] = 'ext_3UTR'
@@ -1275,7 +1371,7 @@ Motif.Search <- function(Sites,fasta){
 #'
 DESeq2.PolyA <- function(QpolyA,colData){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.data.frame(colData)) stop("'colData' is not a data.frame!")
   if (isEmpty(colData$condition)) stop("'colData' does not contain a 'condition' column!")
   if (!isEmpty(setdiff(rownames(colData),QpolyA@sample_names))) stop("Inconsistency between rownames of 'colData' and sample names!")
@@ -1291,7 +1387,7 @@ DESeq2.PolyA <- function(QpolyA,colData){
   dds <- DESeq(dds)
 
   # Normalized table
-  polyA.normailized = cbind(QpolyA@polyA[,c(1:11)],counts(dds,normalized=TRUE))
+  polyA.normailized = cbind(QpolyA@polyA[,c(1:11)],DESeq2::counts(dds,normalized=TRUE))
 
   ### Data transformations and visualization
   ## Count data transformations
@@ -1366,7 +1462,7 @@ DESeq2.PolyA <- function(QpolyA,colData){
 #'
 Quantify.SplitAPA <- function(QpolyA,colData,contrast){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.data.frame(colData)) stop("'colData' is not a data.frame!")
   if (isEmpty(colData$condition)) stop("'colData' does not contain a 'condition' column!")
   if (!isEmpty(setdiff(rownames(colData),QpolyA@sample_names))) stop("Inconsistency between rownames of 'colData' and sample names!")
@@ -1404,7 +1500,7 @@ Quantify.SplitAPA <- function(QpolyA,colData,contrast){
 #'
 Quantify.CanonicalAPA <- function(QpolyA,colData,contrast){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.data.frame(colData)) stop("'colData' is not a data.frame!")
   if (isEmpty(colData$condition)) stop("'colData' does not contain a 'condition' column!")
   if (!isEmpty(setdiff(rownames(colData),QpolyA@sample_names))) stop("Inconsistency between rownames of 'colData' and sample names!")
@@ -1442,7 +1538,7 @@ Quantify.CanonicalAPA <- function(QpolyA,colData,contrast){
 #'
 Quantify.CNCAPA <- function(QpolyA,colData,contrast){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.data.frame(colData)) stop("'colData' is not a data.frame!")
   if (isEmpty(colData$condition)) stop("'colData' does not contain a 'condition' column!")
   if (!isEmpty(setdiff(rownames(colData),QpolyA@sample_names))) stop("Inconsistency between rownames of 'colData' and sample names!")
@@ -1489,7 +1585,7 @@ Quantify.CNCAPA <- function(QpolyA,colData,contrast){
 #'
 Quantify.GeneAPA <- function(QpolyA,colData,contrast){
   # Check parameters.
-  if (class(QpolyA) != "QuantifyPolyA") stop(paste('QpolyA should be a QuantifyPolyA object!'))
+  if (!is(QpolyA, "QuantifyPolyA")) stop(paste('QpolyA should be a QuantifyPolyA object!'))
   if (!is.data.frame(colData)) stop("'colData' is not a data.frame!")
   if (isEmpty(colData$condition)) stop("'colData' does not contain a 'condition' column!")
   if (!isEmpty(setdiff(rownames(colData),QpolyA@sample_names))) stop("Inconsistency between rownames of 'colData' and sample names!")
@@ -1536,7 +1632,7 @@ Quantify.GeneAPA <- function(QpolyA,colData,contrast){
 #'   - One column per sample (named as in `sample_names`) containing the RPP score.
 #'
 #' @importFrom dplyr %>% filter group_by mutate if_else percent_rank summarise_at vars all_of
-#' @importFrom rlang !! sym
+#' @importFrom rlang sym
 #'
 #' @examples
 #' \dontrun{
@@ -1719,7 +1815,7 @@ dynamicsDetect <- function(sample_x,sample_y,sample_strand,sample_center){
 #' @param s1 A numeric vector of PAC usages of sample X.
 #' @param s2 A numeric vector of PAC usages of sample Y.
 #' @param score A numeric vector containing the genomic coordinates of PACs.
-#' @return A numeric value in a range of [-1,1].
+#' @return A numeric value between -1 and 1.
 #' @export
 #'
 FU <- function(s1,s2,score) {
@@ -1752,808 +1848,551 @@ FU <- function(s1,s2,score) {
   return(r)
 }
 
-#' Prepare tail length matrix for PCA
-#' @name prepare_tail_length_matrix
-#' @description Create sample x PAS cluster matrix with aggregated tail lengths
-#' @param QpolyA QuantifyPolyA object
-#' @param sample_info Sample metadata
-#' @param aggregation_method Method to aggregate tail lengths: "mean", "median"
-#' @return A matrix for PCA analysis
+
+#' Principal component analysis of poly(A) tail lengths
 #'
-prepare_tail_length_matrix <- function(QpolyA, sample_info, aggregation_method = "mean") {
-
-  analysis_data <- prepare_cluster_tail_data_simple(QpolyA, sample_info, cores = 1)
-
-  if (nrow(analysis_data) == 0) {
-    stop("No data available for PCA")
-  }
-
-  cluster_means <- analysis_data %>%
-    group_by(sample, cluster_id) %>%
-    summarise(
-      aggregated_tail_length = case_when(
-        aggregation_method == "mean" ~ mean(tail_length),
-        aggregation_method == "median" ~ median(tail_length),
-        TRUE ~ mean(tail_length)
-      ),
-      .groups = 'drop'
-    )
-
-  tail_matrix <- cluster_means %>%
-    pivot_wider(
-      names_from = cluster_id,
-      values_from = aggregated_tail_length,
-      values_fill = NA
-    ) %>%
-    as.data.frame()
-
-  rownames(tail_matrix) <- tail_matrix$sample
-  tail_matrix$sample <- NULL
-
-  tail_matrix <- as.matrix(tail_matrix)
-
-  message("Created tail length matrix: ", nrow(tail_matrix), " samples x ",
-          ncol(tail_matrix), " PAS clusters")
-
-  return(tail_matrix)
-}
-
-perform_tail_length_pca <- function(tail_matrix, scale = TRUE, center = TRUE) {
-
-  if (ncol(tail_matrix) < 2) {
-    stop("Need at least 2 PAS clusters for PCA")
-  }
-
-  if (nrow(tail_matrix) < 3) {
-    stop("Need at least 3 samples for meaningful PCA")
-  }
-
-  message("Performing PCA on ", nrow(tail_matrix), " samples and ",
-          ncol(tail_matrix), " PAS clusters")
-
-  pca_result <- prcomp(tail_matrix, scale = scale, center = center)
-
-
-  variance_explained <- pca_result$sdev^2 / sum(pca_result$sdev^2) * 100
-
-  message("PCA completed. Top 5 PCs explain:")
-  for (i in 1:min(5, length(variance_explained))) {
-    message("  PC", i, ": ", round(variance_explained[i], 2), "%")
-  }
-
-
-  pca_result$variance_explained <- variance_explained
-  pca_result$cumulative_variance <- cumsum(variance_explained)
-
-  return(pca_result)
-}
-
-
-
-#' Handle missing values in tail length matrix
-#' @name handle_missing_values
-#' @description Impute or remove missing values for PCA
-#' @param tail_matrix Tail length matrix
-#' @param max_missing Maximum allowed missing proportion per cluster (default: 0.2)
-#' @param impute_method Imputation method: "mean", "knn", "remove"
-#' @return Cleaned matrix ready for PCA
-#'
-handle_missing_values <- function(tail_matrix, max_missing = 0.2, impute_method = "mean") {
-
-  missing_prop <- apply(tail_matrix, 2, function(x) sum(is.na(x)) / length(x))
-
-  clusters_to_keep <- missing_prop <= max_missing
-  tail_matrix_clean <- tail_matrix[, clusters_to_keep, drop = FALSE]
-
-  message("Removed ", sum(!clusters_to_keep), " PAS clusters with >",
-          max_missing*100, "% missing values")
-  message("Retained ", ncol(tail_matrix_clean), " PAS clusters")
-
-  if (any(is.na(tail_matrix_clean))) {
-    if (impute_method == "mean") {
-      for (j in 1:ncol(tail_matrix_clean)) {
-        col_means <- mean(tail_matrix_clean[, j], na.rm = TRUE)
-        tail_matrix_clean[is.na(tail_matrix_clean[, j]), j] <- col_means
-      }
-      message("Imputed missing values with column means")
-
-    } else if (impute_method == "knn" && requireNamespace("impute", quietly = TRUE)) {
-      tail_matrix_clean <- impute::impute.knn(tail_matrix_clean)$data
-      message("Imputed missing values using KNN")
-
-    } else if (impute_method == "remove") {
-      complete_cases <- complete.cases(tail_matrix_clean)
-      tail_matrix_clean <- tail_matrix_clean[complete_cases, , drop = FALSE]
-      message("Removed ", sum(!complete_cases), " samples with missing values")
-    }
-  }
-
-  return(tail_matrix_clean)
-}
-
-#' Extract PCA results for visualization
-#' @name extract_pca_results
-#' @description Extract coordinates and metadata for PCA plotting
-#' @param pca_result PCA result from prcomp
-#' @param sample_info Sample metadata
-#' @param n_pcs Number of principal components to extract (default: 5)
-#' @return Data frame with PCA coordinates and sample metadata
-#'
-extract_pca_results <- function(pca_result, sample_info, n_pcs = 5) {
-
-  pca_coords <- as.data.frame(pca_result$x)
-
-  pcs_to_keep <- paste0("PC", 1:min(n_pcs, ncol(pca_coords)))
-  pca_coords <- pca_coords[, pcs_to_keep, drop = FALSE]
-
-  pca_coords$sample <- rownames(pca_coords)
-  pca_data <- merge(pca_coords, sample_info, by = "sample", all.x = TRUE)
-
-  attr(pca_data, "variance_explained") <- pca_result$variance_explained[1:n_pcs]
-  attr(pca_data, "cumulative_variance") <- pca_result$cumulative_variance[1:n_pcs]
-
-  return(pca_data)
-}
-#' Simple Poly(A) Tail Length PCA Pipeline
-#'
-#' A simple wrapper function that connects all steps of tail length PCA analysis.
-#'
-#' @param QpolyA A QuantifyPolyA object
-#' @param sample_info A data.frame with sample metadata
-#' @param aggregation_method Aggregation method for tail lengths (default: "mean")
-#' @param max_missing Maximum missing proportion (default: 0.2)
-#' @param impute_method Imputation method (default: "mean")
-#' @param scale Whether to scale PCA (default: TRUE)
-#' @param center Whether to center PCA (default: TRUE)
-#' @param color_by Column to color by (default: "condition")
-#' @param shape_by Column to shape by (default: NULL)
-#' @param pc_x Which PC to plot on x-axis (default: 1)
-#' @param pc_y Which PC to plot on y-axis (default: 2)
-#'
-#' @return A ggplot object with PCA plot
+#' Summarize positive tail lengths per cluster and sample, filter low-count,
+#' incomplete and constant clusters, and perform centered, scaled PCA.
+#' @param QpolyA A QuantifyPolyA object processed by Map.Tail().
+#' @param sample_info A data frame containing sample and condition columns.
+#'   An optional lib_id column identifies libraries.
+#' @param summary_stat Summary statistic, either "mean" or "median".
+#' @param min_count_per_sample Minimum positive tail observations per cluster
+#'   and sample.
+#' @param cores Number of cores. Use 1 on Windows.
+#' @param show_progress Whether to show progress during sample processing.
+#' @return A list with matrix (clusters by samples), sample_info, pca (a
+#'   prcomp object), filtered_data, and removed_clusters.
 #' @export
-#'
-tail_pca <- function(QpolyA, sample_info,
-                     aggregation_method = "mean",
-                     max_missing = 0.2,
-                     impute_method = "mean",
-                     scale = TRUE,
-                     center = TRUE
-                     ) {
+Tail.PCA <- function(QpolyA,
+                     sample_info,
+                     summary_stat = c("mean", "median"),
+                     min_count_per_sample = 10,
+                     cores = 4,
+                     show_progress = TRUE) {
 
-  # Step 1: Prepare tail length matrix
-  tail_matrix <- prepare_tail_length_matrix(QpolyA, sample_info, aggregation_method)
+  if (!requireNamespace("parallel", quietly = TRUE))
+    stop("parallel is required!")
+  if (!requireNamespace("data.table", quietly = TRUE))
+    stop("data.table is required!")
 
-  # Step 2: Handle missing values
-  tail_matrix_clean <- handle_missing_values(tail_matrix, max_missing, impute_method)
+  if (is.null(QpolyA@cluster_tail_lengths))
+    stop("QpolyA@cluster_tail_lengths is NULL!")
 
-  # Step 3: Perform PCA
-  pca_result <- perform_tail_length_pca(tail_matrix_clean, scale, center)
+  summary_stat <- match.arg(summary_stat)
 
-  # Step 4: Extract results for plotting
-  pca_data <- extract_pca_results(pca_result, sample_info)
+  sample_info_dt <- data.table::as.data.table(sample_info)
 
-  return(pca_data)
+  # 校验
+  if (!"sample" %in% colnames(sample_info_dt))
+    stop("sample_info must contain a column named 'sample'")
+  if (!"condition" %in% colnames(sample_info_dt))
+    stop("sample_info must contain a column named 'condition'")
+
+  missing_samples <- setdiff(sample_info_dt$sample, names(QpolyA@cluster_tail_lengths))
+  if (length(missing_samples) > 0)
+    stop("Samples in sample_info not found in QpolyA: ",
+         paste(missing_samples, collapse = ", "))
+
+  sample_names <- sample_info_dt$sample
+
+  if (!"lib_id" %in% colnames(sample_info_dt))
+    sample_info_dt[, lib_id := NA_character_]
+
+  # 预提取数据，避免并行时传递整个 QpolyA
+  sample_data_list <- lapply(sample_names, function(snm) {
+    dt <- QpolyA@cluster_tail_lengths[[snm]]
+    if (is.null(dt) || nrow(dt) == 0) return(NULL)
+    meta <- sample_info_dt[sample == snm]
+    if (nrow(meta) == 0) return(NULL)
+    list(
+      cluster_id = dt$cluster_id,
+      all_tail_lengths = dt$all_tail_lengths,
+      sample = snm,
+      condition = meta$condition[1],
+      lib_id = meta$lib_id[1]
+    )
+  })
+  names(sample_data_list) <- sample_names
+  sample_data_list <- sample_data_list[!sapply(sample_data_list, is.null)]
+
+  if (length(sample_data_list) == 0)
+    stop("No samples have data in cluster_tail_lengths.")
+
+  # process_sample 直接接收单个样本的小数据块
+  process_sample <- function(sample_data) {
+    tail_list <- strsplit(sample_data$all_tail_lengths, ";", fixed = TRUE)
+    cluster_ids <- sample_data$cluster_id
+
+    res_list <- vector("list", length(cluster_ids))
+    for (i in seq_along(cluster_ids)) {
+      tails <- as.numeric(tail_list[[i]])
+      tails <- tails[!is.na(tails) & tails > 0]
+      n <- length(tails)
+      if (n < min_count_per_sample) next
+
+      val <- if (summary_stat == "mean") mean(tails) else median(tails)
+      res_list[[i]] <- data.table::data.table(
+        cluster_id = cluster_ids[i],
+        sample = sample_data$sample,
+        condition = sample_data$condition,
+        lib_id = sample_data$lib_id[1],
+        summary_value = val,
+        count = n
+      )
+    }
+    out <- data.table::rbindlist(res_list, use.names = TRUE, fill = FALSE)
+    if (nrow(out) == 0) {
+      out <- data.table::data.table(
+        cluster_id = character(),
+        sample = character(),
+        condition = character(),
+        lib_id = character(),
+        summary_value = numeric(),
+        count = integer()
+      )
+    }
+    out
+  }
+
+  message("Using ", cores, " CPU cores")
+  message("Processing ", length(sample_data_list), " samples")
+  message("Per-sample minimum count threshold = ", min_count_per_sample)
+
+  if (show_progress && requireNamespace("pbmcapply", quietly = TRUE)) {
+    result_list <- pbmcapply::pbmclapply(sample_data_list, process_sample,
+                                         mc.cores = cores,
+                                         ignore.interactive = !interactive())
+  } else {
+    result_list <- parallel::mclapply(sample_data_list, process_sample,
+                                      mc.cores = cores)
+  }
+
+  # 移除 NULL 和无效结果
+  result_list <- result_list[!sapply(result_list, is.null)]
+  is_valid <- sapply(result_list, function(x) inherits(x, "data.table") || is.data.frame(x))
+  if (any(!is_valid)) {
+    warning(sum(!is_valid), " sample(s) returned invalid data and were skipped.")
+    result_list <- result_list[is_valid]
+  }
+
+  if (length(result_list) == 0)
+    stop("No data after per-sample filtering.")
+
+  all_dt <- data.table::rbindlist(result_list, use.names = TRUE, fill = TRUE)
+  message("Total (cluster-sample) pairs after filtering: ", nrow(all_dt))
+
+  if (nrow(all_dt) == 0)
+    stop("All clusters filtered out. Lower min_count_per_sample?")
+
+  # 构建宽矩阵 (clusters x samples)
+  wide_mat <- data.table::dcast(all_dt,
+                                cluster_id ~ sample,
+                                value.var = "summary_value",
+                                fun.aggregate = mean,
+                                fill = NA)
+
+  cluster_ids <- wide_mat$cluster_id
+  mat <- as.matrix(wide_mat[, -1])
+  rownames(mat) <- cluster_ids
+  colnames(mat) <- names(wide_mat)[-1]
+
+  # 移除有 NA 的 cluster（至少一个样本不满足 min_count 阈值）
+  complete_clusters <- apply(mat, 1, function(row) !any(is.na(row)))
+  mat_complete <- mat[complete_clusters, , drop = FALSE]
+  removed_clusters <- sum(!complete_clusters)
+  if (removed_clusters > 0) {
+    message(removed_clusters, " clusters removed due to insufficient count in at least one sample.")
+    message(sum(complete_clusters), " clusters kept (present in all samples).")
+  } else {
+    message("All clusters are present in all samples.")
+  }
+
+  if (nrow(mat_complete) == 0)
+    stop("No clusters remain after removing incomplete ones. Lower min_count_per_sample?")
+
+  # 移除零方差的 cluster
+  col_var <- apply(mat_complete, 1, var, na.rm = TRUE)
+  const_cols <- which(col_var == 0 | is.na(col_var))
+  if (length(const_cols) > 0) {
+    message(length(const_cols), " constant clusters (zero variance) removed before PCA.")
+    mat_complete <- mat_complete[-const_cols, , drop = FALSE]
+  }
+
+  if (nrow(mat_complete) == 0)
+    stop("No variable clusters remain. Cannot perform PCA.")
+
+  # PCA (samples x clusters)
+  mat_for_pca <- t(mat_complete)
+  pca_res <- prcomp(mat_for_pca, center = TRUE, scale. = TRUE)
+
+  # 样本元数据（按 pca 行顺序）
+  sample_metadata <- unique(all_dt[, .(sample, condition, lib_id)])
+  sample_metadata <- sample_metadata[sample %in% rownames(pca_res$x), ]
+
+  list(
+    matrix = mat_complete,
+    sample_info = sample_metadata,
+    pca = pca_res,
+    filtered_data = all_dt,
+    removed_clusters = names(which(!complete_clusters))
+  )
 }
 
-if (!require("lme4")) install.packages("lme4")
-if (!require("lmerTest")) install.packages("lmerTest")
-if (!require("dplyr")) install.packages("dplyr")
-if (!require("pbmcapply")) install.packages("pbmcapply")
 
-library(lme4)
-library(lmerTest)
-library(dplyr)
-library(pbmcapply)
-
-#' Optimized data preparation - simplified columns
-#' @name prepare_cluster_tail_data_simple
+#' Convert the raw tail length data into a long table
+#' @name prepare_cluster_tail_data_fast
 #' @description Fast parallel processing with only essential columns
 #' @param QpolyA A QuantifyPolyA object
 #' @param sample_info Data frame with sample metadata
 #' @param cores Number of CPU cores to use
-#' @return A data frame with individual mRNA tail lengths (cluster_id, sample, condition, tail_length, lib_id)
+#' @param show_progress Whether to show processing progress.
+#' @return A data table with individual mRNA tail lengths (cluster_id, sample, condition, tail_length, lib_id)
 #'
-prepare_cluster_tail_data_simple <- function(QpolyA, sample_info,
-                                             cores = 4,
-                                             show_progress = TRUE) {
+# ====================== 优化的数据准备函数 ======================
+prepare_cluster_tail_data_fast <- function(QpolyA, sample_info, cores = 4, show_progress = TRUE) {
 
-  if (!require("parallel")) install.packages("parallel")
-  library(parallel)
+  if (!requireNamespace("parallel", quietly = TRUE))
+    stop("parallel is required for this function!")
+  if (!requireNamespace("data.table", quietly = TRUE))
+    stop("data.table is required for this function!")
+  if (is.null(QpolyA@cluster_tail_lengths))
+    stop("QpolyA@cluster_tail_lengths is NULL!")
 
-  sample_names <- names(QpolyA@cluster_tail_lengths)
+  sample_info_dt <- data.table::as.data.table(sample_info)
+
+  if (!"sample" %in% colnames(sample_info_dt))
+    stop("sample_info must contain a column named 'sample'")
+  if (!"condition" %in% colnames(sample_info_dt))
+    stop("sample_info must contain a column named 'condition'")
+
+  missing_samples <- setdiff(sample_info_dt$sample, names(QpolyA@cluster_tail_lengths))
+  if (length(missing_samples) > 0)
+    stop("Samples in sample_info not found in QpolyA: ",
+         paste(missing_samples, collapse = ", "))
+
+  sample_names <- sample_info_dt$sample
+
+  if (!"lib_id" %in% colnames(sample_info_dt))
+    sample_info_dt[, lib_id := NA_character_]
+
+  # 预提取每个样本的数据，打包成列表元素
+  sample_data_list <- lapply(sample_names, function(snm) {
+    dt <- QpolyA@cluster_tail_lengths[[snm]]
+    if (is.null(dt) || nrow(dt) == 0) return(NULL)
+    meta <- sample_info_dt[sample == snm]
+    if (nrow(meta) == 0) return(NULL)
+    list(
+      cluster_id = dt$cluster_id,
+      all_tail_lengths = dt$all_tail_lengths,
+      sample = snm,
+      condition = meta$condition[1],
+      lib_id = meta$lib_id[1]
+    )
+  })
+  names(sample_data_list) <- sample_names
+  sample_data_list <- sample_data_list[!sapply(sample_data_list, is.null)]
+
+  if (length(sample_data_list) == 0)
+    stop("No samples have data in cluster_tail_lengths.")
+
+  # 核心优化：直接对 sample_data_list 的每个元素做 mclapply
+  # 这样每个子进程只拿到自己需要的那一个元素，而不是整个列表
+  process_sample <- function(sample_data) {
+    tail_list <- strsplit(sample_data$all_tail_lengths, ";", fixed = TRUE)
+    cluster_id_rep <- rep(sample_data$cluster_id, lengths(tail_list))
+    tail_vec <- as.numeric(unlist(tail_list, use.names = FALSE))
+    valid <- !is.na(tail_vec) & tail_vec > 0
+    if (!any(valid)) return(NULL)
+
+    data.table::data.table(
+      cluster_id = cluster_id_rep[valid],
+      sample = sample_data$sample,
+      condition = sample_data$condition,
+      tail_length = tail_vec[valid],
+      lib_id = sample_data$lib_id
+    )
+  }
 
   message("Using ", cores, " CPU cores")
-  message("Processing ", length(sample_names), " samples")
-
-  if (is.null(QpolyA@cluster_tail_lengths)) {
-    stop("QpolyA@cluster_tail_lengths is NULL")
-  }
-
-  sample_info_map <- sample_info
-  if (!"lib_id" %in% colnames(sample_info_map)) {
-    sample_info_map$lib_id <- NA_character_
-  }
-
-  process_sample_simple <- function(sample_name) {
-    tryCatch({
-      cluster_data <- QpolyA@cluster_tail_lengths[[sample_name]]
-
-      if (is.null(cluster_data) || nrow(cluster_data) == 0) {
-        return(NULL)
-      }
-
-      sample_meta <- sample_info_map[sample_info_map$sample == sample_name, ]
-      if (nrow(sample_meta) == 0) {
-        return(NULL)
-      }
-
-      condition_val <- sample_meta$condition[1]
-      lib_id_val <- sample_meta$lib_id[1]
-
-      result_list <- lapply(seq_len(nrow(cluster_data)), function(i) {
-        tail_str <- cluster_data$all_tail_lengths[i]
-        if (is.na(tail_str) || tail_str == "") return(NULL)
-
-        tails <- as.numeric(strsplit(tail_str, ";", fixed = TRUE)[[1]])
-        valid_tails <- tails[!is.na(tails) & tails > 0]
-        if (length(valid_tails) == 0) return(NULL)
-
-        data.frame(
-          cluster_id = rep(cluster_data$cluster_id[i], length(valid_tails)),
-          sample = rep(sample_name, length(valid_tails)),
-          condition = rep(condition_val, length(valid_tails)),
-          tail_length = valid_tails,
-          lib_id = rep(lib_id_val, length(valid_tails)),
-          stringsAsFactors = FALSE
-        )
-      })
-
-      valid_items <- result_list[!sapply(result_list, is.null)]
-      if (length(valid_items) == 0) return(NULL)
-
-      do.call(rbind, valid_items)
-
-    }, error = function(e) {
-      message("Error in sample ", sample_name, ": ", e$message)
-      return(NULL)
-    })
-  }
-
-
-  message("Starting parallel processing...")
+  message("Processing ", length(sample_data_list), " samples")
 
   if (show_progress && requireNamespace("pbmcapply", quietly = TRUE)) {
-    results <- pbmcapply::pbmclapply(
-      sample_names,
-      process_sample_simple,
-      mc.cores = cores,
-      ignore.interactive = !interactive()
+    result_list <- pbmcapply::pbmclapply(
+      sample_data_list,   # <--- 直接传列表元素，不是 names
+      process_sample,
+      mc.cores = cores, ignore.interactive = !interactive()
     )
   } else {
-    results <- mclapply(sample_names, process_sample_simple, mc.cores = cores)
+    result_list <- parallel::mclapply(
+      sample_data_list,   # <--- 直接传列表元素，不是 names
+      process_sample,
+      mc.cores = cores
+    )
   }
 
-  valid_results <- results[!sapply(results, is.null)]
+  result_list <- result_list[!sapply(result_list, is.null)]
+  if (length(result_list) == 0) return(data.table::data.table())
 
-  if (length(valid_results) == 0) {
-    warning("No valid data obtained from any sample")
-    return(data.frame())
-  }
-
-  message("Merging results from ", length(valid_results), " samples")
-
-  if (requireNamespace("data.table", quietly = TRUE)) {
-    final_data <- data.table::rbindlist(valid_results, use.names = TRUE, fill = TRUE)
-    final_data <- as.data.frame(final_data)
-  } else {
-    final_data <- dplyr::bind_rows(valid_results)
-  }
-
-  message("Processing completed! Total rows: ", nrow(final_data))
-  return(final_data)
+  final_dt <- data.table::rbindlist(result_list)
+  message("Processing completed! Total rows: ", nrow(final_dt))
+  final_dt[]
 }
+
 
 ##############################################
 #           Statistical test function    #
 ##############################################
-
-#' Perform t-test using all individual mRNA tail lengths for multiple treatments vs NC
-#' @name perform_t_test_all_mRNA_multi
-#' @param cluster_data Data for a single cluster
-#' @param logscale Whether to log2 transform tail lengths
-#' @param control_group Name of control group (default: "NC")
-#' @return A list of results for each treatment vs control comparison
-perform_t_test_all_mRNA_multi <- function(cluster_data, logscale = TRUE, control_group = "NC") {
-
-  if (logscale) {
-    cluster_data$tail_length <- log2(cluster_data$tail_length)
-  }
-
-  # 获取所有条件
-  all_conditions <- unique(cluster_data$condition)
-
-  # 检查控制组是否存在
-  if (!control_group %in% all_conditions) {
-    stop("Control group '", control_group, "' not found in data. Available conditions: ",
-         paste(all_conditions, collapse = ", "))
-  }
-
-  # 获取处理组（所有非控制组的条件）
-  treatment_groups <- setdiff(all_conditions, control_group)
-
-  if (length(treatment_groups) == 0) {
-    stop("No treatment groups found. Only found control group: ", control_group)
-  }
-
-  result_list <- list()
-
-  # 对每个处理组与NC进行比较
-  for (treatment in treatment_groups) {
-    control_data <- cluster_data$tail_length[cluster_data$condition == control_group]
-    treatment_data <- cluster_data$tail_length[cluster_data$condition == treatment]
-
-    # 确保数据存在
-    if (length(control_data) == 0) {
-      warning("No data found for control group '", control_group, "' in this cluster")
-      next
-    }
-    if (length(treatment_data) == 0) {
-      warning("No data found for treatment group '", treatment, "' in this cluster")
-      next
-    }
-
-    # 执行t检验
-    t_result <- t.test(control_data, treatment_data)
-
-    n1 <- length(control_data)
-    n2 <- length(treatment_data)
-    pooled_sd <- sqrt(((n1-1)*var(control_data) + (n2-1)*var(treatment_data)) / (n1+n2-2))
-    cohens_d <- (mean(control_data) - mean(treatment_data)) / pooled_sd
-
-    if (logscale) {
-      fold_change <- 2^(mean(treatment_data) - mean(control_data))
-      log2_fc <- mean(treatment_data) - mean(control_data)
-    } else {
-      fold_change <- mean(treatment_data) / mean(control_data)
-      log2_fc <- log2(fold_change)
-    }
-
-    result_list[[treatment]] <- list(
-      statistic = t_result$statistic,
-      p_value = t_result$p.value,
-      estimate = fold_change,
-      log2_fc = log2_fc,
-      conf_int = t_result$conf.int,
-      cohens_d = cohens_d,
-      n_control = n1,
-      n_treatment = n2,
-      method = paste("Student's t-test: ", control_group, " vs ", treatment)
-    )
-  }
-
-  return(result_list)
-}
-
-#' Perform Wilcoxon test for multiple treatments vs NC
-#' @name perform_wilcoxon_all_mRNA_multi
-#' @param cluster_data Data for a single cluster
-#' @param logscale Whether to log2 transform tail lengths
-#' @param control_group Name of control group (default: "NC")
-perform_wilcoxon_all_mRNA_multi <- function(cluster_data, logscale = TRUE, control_group = "NC") {
-
-  if (logscale) {
-    cluster_data$tail_length <- log2(cluster_data$tail_length)
-  }
-
-  # 获取所有条件
-  all_conditions <- unique(cluster_data$condition)
-
-  # 检查控制组是否存在
-  if (!control_group %in% all_conditions) {
-    stop("Control group '", control_group, "' not found in data.")
-  }
-
-  # 获取处理组
-  treatment_groups <- setdiff(all_conditions, control_group)
-
-  if (length(treatment_groups) == 0) {
-    stop("No treatment groups found.")
-  }
-
-  result_list <- list()
-
-  # 对每个处理组与NC进行比较
-  for (treatment in treatment_groups) {
-    control_data <- cluster_data$tail_length[cluster_data$condition == control_group]
-    treatment_data <- cluster_data$tail_length[cluster_data$condition == treatment]
-
-    if (length(control_data) == 0 || length(treatment_data) == 0) {
-      next
-    }
-
-    wilcox_result <- wilcox.test(control_data, treatment_data, exact = FALSE)
-
-    n_total <- length(control_data) + length(treatment_data)
-    z_value <- qnorm(wilcox_result$p.value / 2)
-    effect_size_r <- abs(z_value) / sqrt(n_total)
-
-    median_diff <- median(treatment_data) - median(control_data)
-    if (logscale) {
-      fold_change <- 2^median_diff
-      log2_fc <- median_diff
-    } else {
-      fold_change <- median(treatment_data) / median(control_data)
-      log2_fc <- log2(fold_change)
-    }
-
-    result_list[[treatment]] <- list(
-      statistic = wilcox_result$statistic,
-      p_value = wilcox_result$p.value,
-      estimate = fold_change,
-      log2_fc = log2_fc,
-      effect_size_r = effect_size_r,
-      n_control = length(control_data),
-      n_treatment = length(treatment_data),
-      method = paste("Wilcoxon Rank Sum Test: ", control_group, " vs ", treatment)
-    )
-  }
-
-  return(result_list)
-}
-
-#' Perform LMM for multiple treatments vs NC
-#' @name perform_lmm_multi
-#' @param cluster_data Data for a single cluster
-#' @param logscale Whether to log2 transform tail lengths
-#' @param control_group Name of control group (default: "NC")
-#' @description LMM implementation for multiple treatment groups
-perform_lmm_multi <- function(cluster_data, logscale = TRUE, control_group = "NC") {
-
-  if (logscale) {
-    cluster_data$tail_length <- log2(cluster_data$tail_length)
-  }
-
-  # 获取所有条件
-  all_conditions <- unique(cluster_data$condition)
-
-  # 检查控制组是否存在
-  if (!control_group %in% all_conditions) {
-    stop("Control group '", control_group, "' not found in data.")
-  }
-
-  # 获取处理组
-  treatment_groups <- setdiff(all_conditions, control_group)
-
-  if (length(treatment_groups) == 0) {
-    stop("No treatment groups found.")
-  }
-
-  result_list <- list()
-
-  # 对每个处理组分别运行LMM
-  for (treatment in treatment_groups) {
-    tryCatch({
-      # 只取当前处理组和控制组的数据
-      subset_data <- cluster_data[cluster_data$condition %in% c(control_group, treatment), ]
-
-      # 设置因子水平，以控制组为参考
-      subset_data$condition <- factor(subset_data$condition,
-                                      levels = c(control_group, treatment))
-
-      # 构建模型公式
-      if ("lib_id" %in% colnames(subset_data) &&
-          length(unique(subset_data$lib_id)) > 1) {
-        model_formula <- as.formula("tail_length ~ condition + (1 | lib_id)")
-      } else {
-        model_formula <- as.formula("tail_length ~ condition")
-      }
-
-      # 拟合模型
-      if ("lib_id" %in% colnames(subset_data) &&
-          length(unique(subset_data$lib_id)) > 1) {
-        res <- lme4::lmer(model_formula, data = subset_data)
-        coefficients <- summary(res)$coefficients
-      } else {
-        res <- lm(model_formula, data = subset_data)
-        coefficients <- summary(res)$coefficients
-      }
-
-      # 检查是否有条件效应
-      if (nrow(coefficients) < 2) {
-        result_list[[treatment]] <- list(
-          estimate = NA,
-          std_error = NA,
-          t_value = NA,
-          p_value = NA,
-          method = paste("LMM: ", control_group, " vs ", treatment, " - NO_CONDITION_EFFECT")
-        )
-        next
-      }
-
-      # 提取条件效应的估计值
-      if (nrow(coefficients) > 1) {
-        estimate <- coefficients[2, 1]  # Estimate for treatment
-        std_error <- coefficients[2, 2]
-        t_value <- coefficients[2, 3]
-
-        # 计算p值
-        if ("lib_id" %in% colnames(subset_data) &&
-            length(unique(subset_data$lib_id)) > 1) {
-          # 对于混合模型，使用lmerTest获取p值
-          res_test <- lmerTest::lmer(model_formula, data = subset_data)
-          p_value <- summary(res_test)$coefficients[2, 5]
-        } else {
-          # 对于线性模型
-          df <- nrow(subset_data) - 2
-          p_value <- 2 * pt(abs(t_value), df = df, lower.tail = FALSE)
-        }
-
-        result_list[[treatment]] <- list(
-          estimate = estimate,
-          std_error = std_error,
-          t_value = t_value,
-          p_value = p_value,
-          n_control = sum(subset_data$condition == control_group),
-          n_treatment = sum(subset_data$condition == treatment),
-          method = paste("Linear Mixed Model: ", control_group, " vs ", treatment)
-        )
-      }
-
-    }, error = function(e) {
-      result_list[[treatment]] <- list(
-        estimate = NA,
-        std_error = NA,
-        t_value = NA,
-        p_value = NA,
-        method = paste("LMM - ERROR for ", control_group, " vs ", treatment, ": ", e$message)
-      )
-    })
-  }
-
-  return(result_list)
-}
-
-##############################################
-#         Main Analytic Functions
-##############################################
-
-#' Analyze PAS clusters using all mRNA tail lengths as independent observations
-#' @name analyze_pas_clusters_mRNA_level_multi
-#' @description Statistical analysis for multiple treatment groups vs control
-#' @param QpolyA A QuantifyPolyA object
-#' @param sample_info Data frame with sample metadata
-#' @param test_methods Statistical methods to use: "t_test", "wilcoxon", "lmm"
-#' @param min_mRNA_per_condition Minimum mRNA molecules per condition (default: 10)
-#' @param logscale Whether to log2 transform tail lengths
-#' @param control_group Name of control group (default: "NC")
-#' @param mc.cores Number of cores for parallel processing
-#' @return Data frame with statistical results for each PAS cluster and each treatment
+#' Pairwise comparison between treatment and control for each PAS cluster
+#' @name Tail.DiffPair
+#' @description Statistical analysis for tail length
+#' @param QpolyA QuantifyPolyA object
+#' @param sample_info data.frame with columns: sample, condition, and optionally lib_id
+#' @param control_group character, name of control condition
+#' @param treatment_group character, name of treatment condition
+#' @param test_method character, one of "t_test", "wilcoxon", "lmm"
+#' @param logscale logical, if TRUE apply log2 transformation before testing
+#' @param min_mRNA_per_condition integer, minimum number of mRNA molecules per group to include cluster
+#' @param mc.cores integer, number of cores for parallel processing
+#' @return data.frame with one row per cluster, containing descriptive statistics (raw scale) and test results
 #' @export
-#'
-polyAlength <- function(QpolyA, sample_info,
-                        test_methods = c("t_test", "wilcoxon", "lmm"),
-                        min_mRNA_per_condition = 10,
-                        logscale = TRUE,
-                        control_group = "NC",
-                        mc.cores = 4) {
-
-  if (class(QpolyA) != "QuantifyPolyA") {
-    stop("QpolyA should be a QuantifyPolyA object!")
-  }
-
-  if (length(QpolyA@cluster_tail_lengths) == 0) {
-    stop("No cluster tail length information found. Run mapTailLengthsToClusters first.")
-  }
-
+Tail.DiffPair <- function(QpolyA, sample_info,
+                          control_group, treatment_group,
+                          test_method = c("t_test", "wilcoxon", "lmm"),
+                          logscale = TRUE,
+                          min_mRNA_per_condition = 10,
+                          mc.cores = 4) {
+  
+  test_method <- match.arg(test_method)
+  
+  # 参数检查
+  if (!is(QpolyA, "QuantifyPolyA"))
+    stop("QpolyA must be a QuantifyPolyA object!")
   required_cols <- c("sample", "condition")
-  if (!all(required_cols %in% colnames(sample_info))) {
-    stop("sample_info must contain columns: ", paste(required_cols, collapse = ", "))
+  if (!all(required_cols %in% colnames(sample_info)))
+    stop("sample_info must contain columns: sample, condition!")
+  if (!control_group %in% sample_info$condition)
+    stop("control_group '", control_group, "' not found in sample_info$condition!")
+  if (!treatment_group %in% sample_info$condition)
+    stop("treatment_group '", treatment_group, "' not found in sample_info$condition!")
+  if (test_method == "lmm") {
+    if (!requireNamespace("lme4", quietly = TRUE))
+      stop("Package 'lme4' is required for LMM. Please install it.")
+    if (!"lib_id" %in% colnames(sample_info))
+      message("Note: 'lib_id' column not found in sample_info. LMM will fall back to linear model.")
   }
+  
+  # 数据准备
+  message("Preparing data...")
+  dt_all <- prepare_cluster_tail_data_fast(QpolyA, sample_info, cores = mc.cores)
+  if (nrow(dt_all) == 0) stop("No data available after preparation.")
+  data.table::setDT(dt_all)
+  
+  # 只保留所需两组
+  dt_all <- dt_all[condition %in% c(control_group, treatment_group)]
+  if (nrow(dt_all) == 0) stop("No data for the specified groups.")
+  
+  cluster_ids <- unique(dt_all$cluster_id)
+  message("Processing ", length(cluster_ids), " clusters (", control_group, " vs ", treatment_group, ")")
+  
+  # 并行处理每个 cluster
+  dt_all <- split(dt_all, by = "cluster_id")
 
-  if (!control_group %in% sample_info$condition) {
-    warning("Control group '", control_group, "' not found in sample_info conditions. Found: ",
-            paste(unique(sample_info$condition), collapse = ", "))
-  }
-
-  analysis_data <- prepare_cluster_tail_data_simple(QpolyA, sample_info, cores = mc.cores)
-
-  if (nrow(analysis_data) == 0) {
-    warning("No data available for statistical analysis")
-    return(data.frame())
-  }
-
-  cluster_ids <- unique(analysis_data$cluster_id)
-
-  message("Performing mRNA-level statistical tests on ", length(cluster_ids), " PAS clusters...")
-  message("Total mRNA observations: ", nrow(analysis_data))
-  message("Average mRNA per cluster: ", round(nrow(analysis_data) / length(cluster_ids), 1))
-  message("Control group: ", control_group)
-
-  all_treatments <- setdiff(unique(analysis_data$condition), control_group)
-  message("Treatment groups: ", paste(all_treatments, collapse = ", "))
-
-  results <- pbmcapply::pbmclapply(cluster_ids, function(cluster_id) {
-
-    cluster_data <- analysis_data[analysis_data$cluster_id == cluster_id, ]
-
-    if (!control_group %in% cluster_data$condition) {
+  results_list <- pbmcapply::pbmclapply(dt_all, function(cluster_dt) {
+    cid <- cluster_dt$cluster_id[1] 
+    
+    # 样本量检查
+    n_ctrl <- sum(cluster_dt$condition == control_group)
+    n_trt  <- sum(cluster_dt$condition == treatment_group)
+    if (n_ctrl < min_mRNA_per_condition || n_trt < min_mRNA_per_condition)
       return(NULL)
+    
+    # ---------- 描述统计（基于原始尾长）----------
+    raw_vals <- split(cluster_dt$tail_length, cluster_dt$condition)
+    control_raw <- raw_vals[[control_group]]
+    treat_raw   <- raw_vals[[treatment_group]]
+    
+    mean_ctrl <- mean(control_raw);   mean_trt <- mean(treat_raw)
+    median_ctrl <- median(control_raw); median_trt <- median(treat_raw)
+    sd_ctrl <- sd(control_raw);       sd_trt <- sd(treat_raw)
+    fold_change_raw <- mean_trt / mean_ctrl
+    mean_diff_raw <- mean_trt - mean_ctrl
+    median_diff_raw <- median_trt - median_ctrl
+    
+    # ---------- 检验数据（可能 log2 转换）----------
+    if (logscale) {
+      cluster_dt[, test_length := log2(tail_length)]
+    } else {
+      cluster_dt[, test_length := tail_length]
     }
+    test_vals <- split(cluster_dt$test_length, cluster_dt$condition)
+    control_test <- test_vals[[control_group]]
+    treat_test   <- test_vals[[treatment_group]]
+    
+    # ---------- 执行检验 ----------
+    if (test_method == "t_test") {
+      t_res <- t.test(treat_test, control_test)
+      n1 <- length(control_test); n2 <- length(treat_test)
+      pooled_sd <- sqrt(((n1-1)*var(control_test) + (n2-1)*var(treat_test)) / (n1+n2-2))
+      cohens_d <- (mean(treat_test) - mean(control_test)) / pooled_sd
 
-    treatment_groups <- setdiff(unique(cluster_data$condition), control_group)
+      mean_diff_test <- mean(treat_test) - mean(control_test)
+      log2_fc <- if(logscale) mean_diff_test else log2(fold_change_raw)
+      
+      res <- data.table::data.table(
+        cluster_id = cid,
+        n_control = n_ctrl, n_treatment = n_trt,
+        mean_control = mean_ctrl, mean_treatment = mean_trt,
+        median_control = median_ctrl, median_treatment = median_trt,
+        sd_control = sd_ctrl, sd_treatment = sd_trt,
+        fold_change = fold_change_raw,
+        mean_diff = mean_diff_raw,
+        median_diff = median_diff_raw,
+        log2_fc = log2_fc,
+        statistic = t_res$statistic,
+        p_value = t_res$p.value,
+        cohens_d = cohens_d,
+        method = paste("t-test", if(logscale) "on log2 scale" else "on raw scale")
+      )
+      
+    } else if (test_method == "wilcoxon") {
+      w_res <- wilcox.test(treat_test, control_test, exact = FALSE)
+      n1 <- length(control_test); n2 <- length(treat_test)
+      W <- w_res$statistic
 
-    if (length(treatment_groups) == 0) {
-      return(NULL)
-    }
+      # 期望和标准差（带 ties 校正）
+      all_vals <- c(control_test, treat_test)
+      ties_tab <- table(all_vals)
+      ties_corr <- sum(ties_tab^3 - ties_tab) / (12 * (n1+n2) * (n1+n2-1))
+      mu <- n1 * n2 / 2
+      sigma <- sqrt(n1 * n2 * ((n1 + n2 + 1) - ties_corr) / 12)
 
-    mRNA_counts <- table(cluster_data$condition)
+      # 连续性修正
+      z_val <- (W - mu - 0.5 * sign(W - mu)) / sigma
 
-    if (mRNA_counts[control_group] < min_mRNA_per_condition) {
-      return(NULL)
-    }
+      # 带方向的效应量
+      r <- z_val / sqrt(n1 + n2)
 
-    valid_treatments <- treatment_groups[treatment_groups %in% names(mRNA_counts) &
-                                           mRNA_counts[treatment_groups] >= min_mRNA_per_condition]
-
-    if (length(valid_treatments) == 0) {
-      return(NULL)
-    }
-
-    result_row <- data.frame(
-      cluster_id = cluster_id,
-      n_samples = length(unique(cluster_data$sample)),
-      n_total_mRNA = nrow(cluster_data),
-      stringsAsFactors = FALSE
-    )
-
-    control_data <- cluster_data$tail_length[cluster_data$condition == control_group]
-    result_row$n_control <- as.numeric(mRNA_counts[control_group])
-    result_row$mean_control <- mean(control_data, na.rm = TRUE)
-    result_row$median_control <- median(control_data, na.rm = TRUE)
-    result_row$sd_control <- sd(control_data, na.rm = TRUE)
-
-    for (treatment in all_treatments) {
-
-      if (treatment %in% valid_treatments) {
-
-
-        treatment_data <- cluster_data$tail_length[cluster_data$condition == treatment]
-
-        result_row[[paste0(treatment, "_n")]] <- as.numeric(mRNA_counts[treatment])
-        result_row[[paste0(treatment, "_mean")]] <- mean(treatment_data, na.rm = TRUE)
-        result_row[[paste0(treatment, "_median")]] <- median(treatment_data, na.rm = TRUE)
-        result_row[[paste0(treatment, "_sd")]] <- sd(treatment_data, na.rm = TRUE)
-
-        if (logscale) {
-          log2_fc <- mean(treatment_data, na.rm = TRUE) - mean(control_data, na.rm = TRUE)
-          fc <- 2^log2_fc
-        } else {
-          fc <- mean(treatment_data, na.rm = TRUE) / mean(control_data, na.rm = TRUE)
-          log2_fc <- log2(fc)
-        }
-
-        result_row[[paste0(treatment, "_fold_change")]] <- fc
-        result_row[[paste0(treatment, "_log2_fc")]] <- log2_fc
-
-        median_diff <- median(treatment_data, na.rm = TRUE) - median(control_data, na.rm = TRUE)
-        result_row[[paste0(treatment, "_median_diff")]] <- median_diff
-
-        for (test_method in test_methods) {
-          tryCatch({
-            if (test_method == "t_test") {
-              t_results <- perform_t_test_all_mRNA_multi(cluster_data, logscale, control_group)
-              if (treatment %in% names(t_results)) {
-                t_result <- t_results[[treatment]]
-                result_row[[paste0(treatment, "_t_statistic")]] <- t_result$statistic
-                result_row[[paste0(treatment, "_t_p_value")]] <- t_result$p_value
-                result_row[[paste0(treatment, "_t_cohens_d")]] <- t_result$cohens_d
-              }
-            } else if (test_method == "wilcoxon") {
-              w_results <- perform_wilcoxon_all_mRNA_multi(cluster_data, logscale, control_group)
-              if (treatment %in% names(w_results)) {
-                w_result <- w_results[[treatment]]
-                result_row[[paste0(treatment, "_w_statistic")]] <- w_result$statistic
-                result_row[[paste0(treatment, "_w_p_value")]] <- w_result$p_value
-                result_row[[paste0(treatment, "_w_effect_size")]] <- w_result$effect_size_r
-              }
-            } else if (test_method == "lmm") {
-              lmm_results <- perform_lmm_multi(cluster_data, logscale, control_group)
-              if (treatment %in% names(lmm_results)) {
-                lmm_result <- lmm_results[[treatment]]
-                result_row[[paste0(treatment, "_lmm_estimate")]] <- lmm_result$estimate
-                result_row[[paste0(treatment, "_lmm_std_error")]] <- lmm_result$std_error
-                result_row[[paste0(treatment, "_lmm_t_value")]] <- lmm_result$t_value
-                result_row[[paste0(treatment, "_lmm_p_value")]] <- lmm_result$p_value
-              }
+      median_diff_test <- median(treat_test) - median(control_test)
+      log2_fc <- if(logscale) median_diff_test else log2(fold_change_raw)
+      
+      res <- data.table::data.table(
+        cluster_id = cid,
+        n_control = n_ctrl, n_treatment = n_trt,
+        mean_control = mean_ctrl, mean_treatment = mean_trt,
+        median_control = median_ctrl, median_treatment = median_trt,
+        sd_control = sd_ctrl, sd_treatment = sd_trt,
+        fold_change = fold_change_raw,
+        mean_diff = mean_diff_raw,
+        median_diff = median_diff_raw,
+        log2_fc = log2_fc,
+        statistic = w_res$statistic,
+        p_value = w_res$p.value,
+        effect_size_r = r,
+        method = paste("Wilcoxon", if(logscale) "on log2 scale" else "on raw scale")
+      )
+      
+    } else { # lmm
+      # 确保 condition 为因子，对照组为参考水平
+      cluster_dt[, condition := factor(condition, levels = c(control_group, treatment_group))]
+      
+      # 判断是否使用混合模型
+      if ("lib_id" %in% colnames(cluster_dt) && uniqueN(cluster_dt$lib_id) > 1) {
+        # 混合模型
+        model <- tryCatch(
+          lme4::lmer(test_length ~ condition + (1 | lib_id), data = cluster_dt),
+          error = function(e) NULL
+        )
+        if (!is.null(model)) {
+          coefs <- summary(model)$coefficients
+          if (nrow(coefs) > 1) {
+            estimate <- coefs[2, 1]
+            std_error <- coefs[2, 2]
+            t_value <- coefs[2, 3]
+            if (requireNamespace("lmerTest", quietly = TRUE)) {
+              model_test <- lmerTest::lmer(test_length ~ condition + (1 | lib_id), data = cluster_dt)
+              p_value <- summary(model_test)$coefficients[2, 5]
+            } else {
+              # 近似自由度
+              df <- nrow(cluster_dt) - length(unique(cluster_dt$lib_id)) - 1
+              p_value <- 2 * pt(abs(t_value), df = df, lower.tail = FALSE)
             }
-          }, error = function(e) {
-            NULL
-          })
+            log2_fc <- estimate
+          } else {
+            estimate <- std_error <- t_value <- p_value <- log2_fc <- NA_real_
+          }
+        } else {
+          estimate <- std_error <- t_value <- p_value <- log2_fc <- NA_real_
         }
-
       } else {
-
-        result_row[[paste0(treatment, "_n")]] <- NA_real_
-        result_row[[paste0(treatment, "_mean")]] <- NA_real_
-        result_row[[paste0(treatment, "_median")]] <- NA_real_
-        result_row[[paste0(treatment, "_sd")]] <- NA_real_
-        result_row[[paste0(treatment, "_fold_change")]] <- NA_real_
-        result_row[[paste0(treatment, "_log2_fc")]] <- NA_real_
-        result_row[[paste0(treatment, "_median_diff")]] <- NA_real_  # 新增
-
-
-        if ("t_test" %in% test_methods) {
-          result_row[[paste0(treatment, "_t_statistic")]] <- NA_real_
-          result_row[[paste0(treatment, "_t_p_value")]] <- NA_real_
-          result_row[[paste0(treatment, "_t_cohens_d")]] <- NA_real_
-        }
-        if ("wilcoxon" %in% test_methods) {
-          result_row[[paste0(treatment, "_w_statistic")]] <- NA_real_
-          result_row[[paste0(treatment, "_w_p_value")]] <- NA_real_
-          result_row[[paste0(treatment, "_w_effect_size")]] <- NA_real_
-        }
-        if ("lmm" %in% test_methods) {
-          result_row[[paste0(treatment, "_lmm_estimate")]] <- NA_real_
-          result_row[[paste0(treatment, "_lmm_std_error")]] <- NA_real_
-          result_row[[paste0(treatment, "_lmm_t_value")]] <- NA_real_
-          result_row[[paste0(treatment, "_lmm_p_value")]] <- NA_real_
+        # 普通线性模型
+        model <- lm(test_length ~ condition, data = cluster_dt)
+        coefs <- summary(model)$coefficients
+        if (nrow(coefs) > 1) {
+          estimate <- coefs[2, 1]
+          std_error <- coefs[2, 2]
+          t_value <- coefs[2, 3]
+          p_value <- coefs[2, 4]
+          log2_fc <- estimate
+        } else {
+          estimate <- std_error <- t_value <- p_value <- log2_fc <- NA_real_
         }
       }
+      
+      res <- data.table::data.table(
+        cluster_id = cid,
+        n_control = n_ctrl, n_treatment = n_trt,
+        mean_control = mean_ctrl, mean_treatment = mean_trt,
+        median_control = median_ctrl, median_treatment = median_trt,
+        sd_control = sd_ctrl, sd_treatment = sd_trt,
+        fold_change = fold_change_raw,
+        mean_diff = mean_diff_raw,
+        median_diff = median_diff_raw,
+        log2_fc = if(logscale) log2_fc else log2(fold_change_raw),
+        estimate = estimate,
+        std_error = std_error,
+        t_value = t_value,
+        p_value = p_value,
+        method = paste("LMM", if(logscale) "on log2 scale" else "on raw scale")
+      )
     }
-
-    return(result_row)
-
+    
+    return(res)
   }, mc.cores = mc.cores)
-
-
-  results <- results[!sapply(results, is.null)]
-
-  if (length(results) == 0) {
-    warning("No valid results obtained from statistical tests")
+  
+  # 合并结果
+  results_list <- results_list[!sapply(results_list, is.null)]
+  if (length(results_list) == 0) {
+    warning("No clusters passed the minimum mRNA filter.")
     return(data.frame())
   }
-
-
-  final_results <- dplyr::bind_rows(results)
-
-
-  rownames(final_results) <- NULL
-
-
-  for (treatment in all_treatments) {
-    t_p_col <- paste0(treatment, "_t_p_value")
-    if (t_p_col %in% colnames(final_results)) {
-      q_col <- paste0(treatment, "_t_q_value")
-      final_results[[q_col]] <- p.adjust(final_results[[t_p_col]], method = "BH")
-    }
-
-    w_p_col <- paste0(treatment, "_w_p_value")
-    if (w_p_col %in% colnames(final_results)) {
-      q_col <- paste0(treatment, "_w_q_value")
-      final_results[[q_col]] <- p.adjust(final_results[[w_p_col]], method = "BH")
-    }
-
-    lmm_p_col <- paste0(treatment, "_lmm_p_value")
-    if (lmm_p_col %in% colnames(final_results)) {
-      q_col <- paste0(treatment, "_lmm_q_value")
-      final_results[[q_col]] <- p.adjust(final_results[[lmm_p_col]], method = "BH")
-    }
+  
+  final_dt <- data.table::rbindlist(results_list, fill = TRUE)
+  
+  # 多重假设校正 (Benjamini-Hochberg)
+  if ("p_value" %in% names(final_dt)) {
+    final_dt[, q_value := p.adjust(p_value, method = "BH")]
   }
-
-  final_results <- final_results[order(final_results$cluster_id), ]
-
-  message("mRNA-level analysis completed. Results for ", nrow(final_results),
-          " clusters in wide format.")
-
-  return(final_results)
+  
+  final_dt <- final_dt[order(cluster_id)]
+  message("Completed. Results for ", nrow(final_dt), " clusters.")
+  as.data.frame(final_dt)
 }
+
+
+
 ##############################################
 #           Results summary function    #
 ##############################################
 
 #' Generate summary of mRNA-level statistical results for multiple treatments
 #' @name summarize_mRNA_level_results_multi
+#' @param results Legacy wide-format results with treatment-specific column names.
+#' @param alpha Significance threshold for adjusted P values.
+#' @param control_group Name of the control condition.
+#' @return A summary data frame, a message for empty input, or invisible NULL
+#'   when no treatment columns are present. This internal helper expects the
+#'   legacy wide format, not the output of Tail.DiffPair().
 summarize_mRNA_level_results_multi <- function(results, alpha = 0.05, control_group = "NC") {
 
   if (nrow(results) == 0) {
@@ -2656,82 +2495,23 @@ summarize_mRNA_level_results_multi <- function(results, alpha = 0.05, control_gr
   return(invisible(summary_df))
 }
 
-#' APPLE: Analysis of Poly(A) Lengths and Expression
+#' APPLE: poly(A) sites and tail-length analysis
 #'
-#' @description
-#' The 'APPLE' package provides a comprehensive workflow for analyzing poly(A) tail
-#' lengths and alternative polyadenylation (APA) from sequencing data. It supports
-#' the entire analysis pipeline: from raw SAM/BED file processing, poly(A) site
-#' clustering, tail length extraction, to statistical testing for differential
-#' polyadenylation between multiple experimental conditions.
-#'
-#' @details
-#' The main features of APPLE include:
-#' \itemize{
-#'   \item **Data import and preprocessing**: Functions to read SAM files, detect
-#'         poly(A) tails (using pt tags or regex), and generate BED files with
-#'         tail length information (\code{\link{Extract_polyAsite}}, \code{\link{Load.PolyA}}).
-#'   \item **Poly(A) site clustering**: Weighted density peak clustering to define
-#'         Poly(A) Clusters (PACs) (\code{\link{Cluster.PolyA}}).
-#'   \item **Tail length mapping**: Map individual mRNA tail lengths to PACs
-#'         (\code{\link{mapTail}}).
-#'   \item **Annotation and filtering**: Annotate PACs with genomic features
-#'         (\code{\link{Annotate.PolyA}}) and filter low-count PACs (\code{\link{Filter.PolyA}}).
-#'   \item **Statistical analysis**: Perform differential polyadenylation analysis
-#'         using various approaches:
-#'         \itemize{
-#'           \item mRNA-level t-test, Wilcoxon, or linear mixed models for multiple
-#'                 treatment groups vs control (\code{\link{polyAlength}}).
-#'           \item Quantify APA dynamics among split, canonical, or whole-gene PACs
-#'                 (\code{\link{Quantify.SplitAPA}}, \code{\link{Quantify.CanonicalAPA}},
-#'                 \code{\link{Quantify.CNCAPA}}, \code{\link{Quantify.GeneAPA}}).
-#'           \item Principal Component Analysis on tail length matrices
-#'                 (\code{\link{tail_pca}}).
-#'         }
-#'   \item **Visualization**: PCA plots, UMAP, and DESeq2-based sample quality
-#'         assessment (\code{\link{DESeq2.PolyA}}).
-#'   \item **Utility functions**: Save tail length tables (\code{\link{Save.TailLengths}}),
-#'         search for poly(A) signals (\code{\link{Motif.Search}}), and generate
-#'         analysis summaries (\code{\link{summarize_mRNA_level_results_multi}}).
-#' }
-#'
-#' The package defines an S4 class \code{\linkS4class{QuantifyPolyA}} that holds
-#' all raw and processed data throughout the workflow.
-#'
-#' @section Package options:
-#' No specific options are currently defined.
-#'
-#' @section Dependencies:
-#' APPLE relies on several CRAN and Bioconductor packages, including:
-#' \code{lme4}, \code{lmerTest}, \code{ggplot2}, \code{dplyr}, \code{tidyr},
-#' \code{matrixStats}, \code{data.table}, \code{parallel}, \code{pbmcapply},
-#' \code{GenomicRanges}, \code{Rsamtools}, \code{rtracklayer}, \code{plyranges},
-#' \code{DESeq2}, \code{ggbio}, \code{FactoMineR}, \code{factoextra}, \code{uwot},
-#' and others. Most of these are automatically installed when installing the package
-#' via \code{BiocManager::install("APPLE")} (once submitted to Bioconductor) or
-#' manually from CRAN/Bioconductor.
-#'
-#' @note
-#' This package is designed for users familiar with poly(A) tail sequencing assays
-#' (e.g., PAT-seq, PAL-seq, FLAM-seq) and R/Bioconductor.
-#'
-#' @author
-  #' * Contributor 1
-  #' * Contributor 2
-#'
-#' @docType package
-#' @name APPLE-package
-#' @aliases APPLE
-#' @importFrom methods new
+#' Align reads, extract poly(A) sites and tails, remove internal priming,
+#' cluster and annotate sites, and compare tail lengths and APA usage.
+#' @seealso [minimap2()], [Extract_polyAsite()], [Load.PolyA()],
+#'   [Remove.IP()], [Cluster.PolyA()], [Annotate.PolyA()], [Filter.PolyA()],
+#'   [Map.Tail()], [Tail.PCA()], [Tail.DiffPair()], [Quantify.GeneAPA()]
+#' @importFrom methods new is setClass setMethod
 #' @importFrom stats as.formula complete.cases lm median p.adjust prcomp pt qnorm sd t.test var wilcox.test
-#' @importFrom utils install.packages write.table
+#' @importFrom utils write.table
 #' @importFrom dplyr %>% bind_rows group_by summarise filter n mutate full_join left_join rename case_when
 #' @importFrom tidyr pivot_wider
 #' @importFrom ggplot2 ggplot aes geom_point xlab ylab coord_fixed
 #' @importFrom GenomicRanges GRanges findOverlaps
 #' @importFrom IRanges IRanges
 #' @importFrom S4Vectors queryHits subjectHits
-#' @importFrom BiocGenerics start end width
+#' @importFrom BiocGenerics start end width which.max
 #' @importFrom tools file_path_sans_ext
 #' @importFrom stringr str_split str_extract str_replace str_sub str_length str_detect
 #' @importFrom parallel mclapply
@@ -2743,10 +2523,11 @@ summarize_mRNA_level_results_multi <- function(results, alpha = 0.05, control_gr
 #' @importFrom FactoMineR PCA
 #' @importFrom SummarizedExperiment assay
 #' @importFrom S4Vectors isEmpty
-#' @importFrom BiocGenerics which.max
 #' @importFrom outliers scores
 #' @importFrom plyranges join_overlap_intersect_directed as_granges find_overlaps
 #' @importFrom rtracklayer import
 #' @importFrom Rsamtools indexFa
 #' @importFrom bedr bedr
+#' @importFrom data.table := uniqueN
+#' @importFrom rlang .data
 "_PACKAGE"

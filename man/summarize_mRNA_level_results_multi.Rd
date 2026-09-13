@@ -6,6 +6,18 @@
 \usage{
 summarize_mRNA_level_results_multi(results, alpha = 0.05, control_group = "NC")
 }
+\arguments{
+\item{results}{Legacy wide-format results with treatment-specific column names.}
+
+\item{alpha}{Significance threshold for adjusted P values.}
+
+\item{control_group}{Name of the control condition.}
+}
+\value{
+A summary data frame, a message for empty input, or invisible NULL
+when no treatment columns are present. This internal helper expects the
+legacy wide format, not the output of Tail.DiffPair().
+}
 \description{
 Generate summary of mRNA-level statistical results for multiple treatments
 }

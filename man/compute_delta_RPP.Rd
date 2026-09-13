@@ -8,29 +8,29 @@ compute_delta_RPP(polyA_rank, colData, control_cond, treat_cond)
 }
 \arguments{
 \item{polyA_rank}{A data frame containing gene-level RPP scores.
-Must include a column `gene_id` and one column per sample, named
-exactly as the sample identifiers in `colData`.}
+Must include a column \code{gene_id} and one column per sample, named
+exactly as the sample identifiers in \code{colData}.}
 
 \item{colData}{A data frame with sample metadata. Row names must be
-sample names (matching column names in `polyA_rank`). It must contain
-a column named `condition` that specifies group membership.}
+sample names (matching column names in \code{polyA_rank}). It must contain
+a column named \code{condition} that specifies group membership.}
 
 \item{control_cond}{Character string, the name of the control condition
-as it appears in `colData$condition`.}
+as it appears in \code{colData$condition}.}
 
 \item{treat_cond}{Character string, the name of the treatment condition
-as it appears in `colData$condition`.}
+as it appears in \code{colData$condition}.}
 }
 \value{
 A data frame with two columns:
-  \item{gene_id}{Gene identifier (from `polyA_rank$gene_id`).}
-  \item{delta_RPP}{Difference in mean RPP (treat minus control).}
+\item{gene_id}{Gene identifier (from \code{polyA_rank$gene_id}).}
+\item{delta_RPP}{Difference in mean RPP (treat minus control).}
 }
 \description{
 This function calculates the difference in mean relative polyadenylation
 proportion (RPP) between two conditions (e.g., treatment vs. control)
 using a precomputed gene-level RPP matrix. The delta RPP is defined as
-`mean(treat group RPP) - mean(control group RPP)`.
+\verb{mean(treat group RPP) - mean(control group RPP)}.
 }
 \examples{
 \dontrun{

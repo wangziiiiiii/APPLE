@@ -35,47 +35,25 @@ These analyses address different questions: changes in tail length, changes in s
 
 Use Linux for the complete workflow, which invokes command-line tools and uses multicore processing. Install external tools separately and make sure they are available on your PATH.
 
-### Install dependencies
+### Install dependencies and APPLE
 
-**Install standalone tools:** \
-samtools (>=1.17), bedtools, and minimap2 (needed only for the alignment step)
-**Install R packages:** \
-bedr, stringr, dplyr, tidyr,matrixStats, pbmcapply, FactoMineR, factoextra, ggplot2, uwot, lme4, lmerTest, GenomicRanges, GenomicFeatures, rtracklayer,Rsamtools, DESeq2, ggbio, readr, BiocGenerics, GenomeInfoDb,IRanges,  S4Vectors, SummarizedExperiment, methods, outliers, tidyselect, data.table, parallel
-**Install R dependencies:**
+Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. Bioconductor repositories are needed for the genomic analysis dependencies.
 
 ```
-if (!require("tools")) install.packages("tools")
-if (!require("bedr")) install.packages("bedr")
-if (!require("stringr")) install.packages("stringr")
-if (!require("outliers")) install.packages("outliers")
-if (!require("dplyr")) install.packages("dplyr")
-if (!require("tidyr")) install.packages("tidyr")
-if (!require("matrixStats")) install.packages("matrixStats")
-if (!require("pbmcapply")) install.packages("pbmcapply")
-if (!require("FactoMineR")) install.packages("FactoMineR")
-if (!require("factoextra")) install.packages("factoextra")
-if (!require("ggplot2")) install.packages("ggplot2")
-if (!require("uwot")) install.packages("uwot")
-if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-if (!require("plyranges")) BiocManager::install("plyranges")
-if (!require("GenomicRanges")) BiocManager::install("GenomicRanges")
-if (!require("GenomicFeatures")) BiocManager::install("GenomicFeatures")
-if (!require("rtracklayer")) BiocManager::install("rtracklayer")
-if (!require("Rsamtools")) BiocManager::install("Rsamtools")
-if (!require("DESeq2")) BiocManager::install("DESeq2")
-if (!require("ggbio")) BiocManager::install("ggbio")
-if (!require("readr")) BiocManager::install("readr")
-if (!require("stringr")) BiocManager::install("stringr")
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+options(repos = BiocManager::repositories())
+remotes::install_github("wangziiiiiii/APPLE.R")
+library(APPLE)
 ```
 
-### Install APPLE
+While the repository is private, installation requires GitHub authentication with access to APPLE.R. Loading APPLE does not install packages or attach dependency packages to the search path.
 
-```
-install.packages('devtools')
-devtools::install_github("wangziiiiiii/APPLE.R")
-```
-
-The package declares R dependencies in DESCRIPTION; external executables must be installed separately. While this repository is private, GitHub authentication with access to APPLE.R is required for installation.
+**API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
 ## 3. Workflow
 
@@ -166,6 +144,36 @@ QpolyA <- Load.PolyA(dir = "/path/to/bed/")
 | --- | --- |
 | Returned object | A QuantifyPolyA object containing raw poly(A) site information in the @pre.polyA slot and tail length information in @tail_lengths. |
 
+#### Internal priming removal
+
+Remove.IP() filters candidate internal-priming sites using the reference FASTA. Run it after loading raw sites and before clustering. Both site data and stored tail lengths are filtered together.
+
+```
+QpolyA <- Remove.IP(
+  QpolyA,
+  fasta = "/path/to/genome.fa",
+  flank_len = 15,
+  win_size = 10,
+  min_A = 8
+)
+```
+
+#### Arguments
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | QuantifyPolyA object containing raw sites. |
+| `fasta` | Reference genome FASTA path. |
+| `flank_len` | Size of the sequence neighborhood; default 15. |
+| `win_size` | Sliding-window size; default 10. |
+| `min_A` | Minimum A count in a window; default 8. |
+
+#### Output
+
+| Output | Description |
+| --- | --- |
+| QuantifyPolyA object | Raw sites and corresponding tail records after internal-priming filtering. |
+
 #### 3.3.2 Weighted density peak clustering
 
 Cluster.PolyA() applies a weighted density peak clustering algorithm to group adjacent poly(A) sites into Poly(A) Clusters (PACs). The parameter max.gapwidth controls the maximum allowed gap between sites within a cluster. Clusters wider than max.gapwidth are further refined by a second clustering step.
@@ -239,12 +247,12 @@ QpolyA <- Filter.PolyA(QpolyA, min_count = 10, min_sample = 1)
 
 #### 3.3.5 Map tail lengths to PolyA Clusters
 
-After filtering, map individual tail lengths to their PACs. mapTail() performs this mapping, creating a sample‑wise table linking PAC IDs to concatenated tail lengths.
+After filtering, map individual tail lengths to their PACs. Map.Tail() performs this mapping, creating a sample‑wise table linking PAC IDs to concatenated tail lengths.
 
 #### Usage
 
 ```
-QpolyA <- mapTail(QpolyA, delimiter = ";")
+QpolyA <- Map.Tail(QpolyA, delimiter = ";")
 ```
 
 #### Arguments
@@ -262,76 +270,89 @@ QpolyA <- mapTail(QpolyA, delimiter = ";")
 
 ### 3.4 Tail-length analysis
 
-#### 3.4.1 Comparing tail lengths at the mRNA level
+#### 3.4.1 Pairwise tail-length comparisons
 
-polyAlength() compares individual mRNA tail lengths within each PAC between a control condition and one or more treatment conditions. The t-test and Wilcoxon options pool mRNA observations within each condition; they do not test sample-level averages. The LMM option uses a random intercept for lib_id when multiple library IDs are available, and otherwise fits a linear model. Supply library IDs that reflect the experimental design.
+Tail.DiffPair() compares one treatment with one control at a time using a single selected test: t-test, Wilcoxon rank-sum test, or a linear mixed model (LMM). The t-test and Wilcoxon test pool individual mRNA observations within each condition. The LMM includes a random intercept for lib_id when multiple libraries are available; otherwise it uses a linear model.
 
-With logscale = TRUE, the test helpers use log2-transformed tail lengths. Summary means and medians are calculated from the original tail lengths. The function applies Benjamini–Hochberg adjustment across tested PACs separately for each treatment and test method.
+Descriptive statistics use raw tail lengths. With logscale = TRUE, statistical tests use log2-transformed lengths. BH correction is applied across retained PACs within each function call.
 
 #### Usage
 
 ```
-results <- polyAlength(QpolyA,
-                       sample_info = sample_metadata,
-                       test_methods = c("t_test", "wilcoxon", "lmm"),
-                       min_mRNA_per_condition = 10,
-                       logscale = TRUE,
-                       control_group = "NC",
-                       mc.cores = 4)
+results <- Tail.DiffPair(
+  QpolyA,
+  sample_info = sample_metadata,
+  control_group = "NC",
+  treatment_group = "Fip1",
+  test_method = "t_test",
+  min_mRNA_per_condition = 10,
+  logscale = TRUE,
+  mc.cores = 4
+)
 ```
 
 #### Arguments
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object with cluster tail lengths. |
-| `sample_info` | A data.frame with columns `sample`, `condition`, and optionally `lib_id`. |
-| `test_methods` | Vector of tests to perform: "t_test", "wilcoxon", "lmm". |
-| `min_mRNA_per_condition` | Minimum number of mRNA molecules per condition for a PAC to be tested. |
-| `logscale` | Whether to log2‑transform tail lengths before testing. |
-| `control_group` | Name of the control condition (must match values in `sample_info$condition`). |
-| `mc.cores` | Number of cores for parallel processing. |
+| `QpolyA` | A QuantifyPolyA object processed with Map.Tail(). |
+| `sample_info` | Metadata containing sample, condition, and optionally lib_id. |
+| `control_group` | Control condition name. |
+| `treatment_group` | Treatment condition name. |
+| `test_method` | One of "t_test", "wilcoxon", or "lmm"; default "t_test". |
+| `logscale` | Apply log2 transformation for testing; default TRUE. |
+| `min_mRNA_per_condition` | Minimum number of positive mRNA tail lengths per group and PAC; default 10. |
+| `mc.cores` | Number of processing cores; default 4. Use 1 on Windows. |
 
 #### Output
 
 | Output | Description |
 | --- | --- |
-| Result data frame | One row per PAC, in wide format. |
-| Summary statistics | Control and treatment means, medians, standard deviations, and observation counts. |
-| Test results | Test statistics, P values, and BH-adjusted q values for each test method and treatment. |
+| Result data frame | One row per retained PAC, identified by cluster_id. |
+| Descriptive statistics | n_control, n_treatment, means, medians, and standard deviations on the raw scale. |
+| Raw effect measures | fold_change is treatment mean / control mean; mean_diff and median_diff are treatment minus control. |
+| `log2_fc` | On log2-transformed data: mean difference for t-test, median difference for Wilcoxon, and condition coefficient for LMM. On raw data: log2 of the raw mean ratio. |
+| Test-specific fields | statistic and cohens_d (t-test); statistic and effect_size_r (Wilcoxon); estimate, std_error, and t_value (LMM). |
+| `p_value`, `q_value` | Test P value and BH-adjusted P value across PACs in this call. |
+| `method` | Selected test and transformation scale. |
 
-#### 3.4.2 Principal Component Analysis (PCA) on tail length matrices
+#### 3.4.2 Principal component analysis of tail lengths
 
-Principal Component Analysis can be used to explore global patterns in poly(A) tail length variation across samples. APPLE provides a streamlined pipeline tail_pca() that aggregates tail lengths per PAC, handles missing values, performs PCA, and returns the coordinates for visualization.
+Tail.PCA() summarizes tail lengths per PAC and sample, removes low-count or incomplete PACs, drops constant PACs, and runs centered, scaled PCA. It returns a list containing the matrix, metadata, and PCA object; it does not impute missing values.
 
 #### Usage
 
 ```
-pca_data <- tail_pca(QpolyA, sample_info,
-                     aggregation_method = "mean",
-                     max_missing = 0.2,
-                     impute_method = "mean",
-                     scale = TRUE,
-                     center = TRUE)
+pca_results <- Tail.PCA(
+  QpolyA,
+  sample_info,
+  summary_stat = "mean",
+  min_count_per_sample = 10,
+  cores = 4,
+  show_progress = TRUE
+)
 ```
 
 #### Arguments
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object that has been processed through clustering and tail length mapping. |
-| `sample_info` | A data.frame with sample metadata. Must contain columns `sample` and `condition` |
-| `aggregation_method` | Method to aggregate tail lengths per PAC: either "mean" or "median". Default is "mean". |
-| `max_missing` | Maximum allowed proportion of missing values per PAC. PACs with more missing values are removed. Default is 0.2. |
-| `impute_method` | Method to handle remaining missing values: "mean" (impute with column mean), "knn" (k‑nearest neighbours, requires `impute` package), or "remove" (remove samples with any missing). Default is "mean". |
-| `scale` | Logical; whether to scale variables to unit variance before PCA. Default is TRUE. |
-| `center` | Logical; whether to center variables to zero mean before PCA. Default is TRUE. |
+| `QpolyA` | A QuantifyPolyA object processed with Map.Tail(). |
+| `sample_info` | Metadata containing sample and condition, optionally lib_id. |
+| `summary_stat` | Per-PAC summary: "mean" (default) or "median". |
+| `min_count_per_sample` | Minimum positive tail observations per PAC and sample; default 10. |
+| `cores` | Number of processing cores; default 4. Use 1 on Windows. |
+| `show_progress` | Show progress during sample processing; default TRUE. |
 
 #### Output
 
-| Output | Description |
+| Element | Description |
 | --- | --- |
-| Returned object | A data frame containing PCA coordinates for each sample (columns PC1, PC2, …), merged with the provided sample_info metadata. The returned object also has attributes variance_explained and cumulative_variance storing the percentage of variance explained by each principal component. |
+| `matrix` | Retained tail-length summary matrix, with PACs in rows and samples in columns. |
+| `sample_info` | Metadata for samples represented in the PCA. |
+| `pca` | A prcomp object; sample coordinates are in pca$x. |
+| `filtered_data` | Long table after the per-sample count filter. |
+| `removed_clusters` | IDs of incomplete PACs removed before the zero-variance filter. |
 
 ### 3.5 Differential PAC counts
 
@@ -538,10 +559,11 @@ bed_files <- sub("\\.sam$", ".bed", unname(sam_files))
 stopifnot(all(file.exists(bed_files)))
 
 QpolyA <- Load.PolyA(files = bed_files)
+QpolyA <- Remove.IP(QpolyA, fasta = reference)
 QpolyA <- Cluster.PolyA(QpolyA, max.gapwidth = 24, mc.cores = 4)
 QpolyA <- Annotate.PolyA(QpolyA, gff = annotation)
 QpolyA <- Filter.PolyA(QpolyA, min_count = 10, min_sample = 2)
-QpolyA <- mapTail(QpolyA)
+QpolyA <- Map.Tail(QpolyA)
 
 ```
 
@@ -576,39 +598,39 @@ Here, each sample is treated as a separate library. For other datasets, assign l
 
 #### Compare tail lengths
 
+Run one contrast and one method per call. Repeat with test_method = "wilcoxon" or "lmm" when appropriate for the analysis.
+
 ```
-tail_results <- polyAlength(
+tail_results <- Tail.DiffPair(
   QpolyA = QpolyA,
   sample_info = sample_info,
-  test_methods = c("t_test", "wilcoxon", "lmm"),
-  min_mRNA_per_condition = 10,
   control_group = "NC",
+  treatment_group = "Fip1",
+  test_method = "t_test",
+  min_mRNA_per_condition = 10,
   logscale = TRUE,
   mc.cores = 4
 )
 
 head(tail_results)
-
 ```
 
 #### Explore tail-length variation
 
 ```
-tail_coordinates <- tail_pca(
+tail_pca_results <- Tail.PCA(
   QpolyA = QpolyA,
   sample_info = sample_info,
-  aggregation_method = "mean",
-  max_missing = 0.2,
-  impute_method = "mean",
-  scale = TRUE,
-  center = TRUE
+  summary_stat = "mean",
+  min_count_per_sample = 10,
+  cores = 4,
+  show_progress = TRUE
 )
 
-head(tail_coordinates)
-
+head(tail_pca_results$pca$x)
 ```
 
-PCA requires at least three samples and two retained PAC variables in the current implementation. Scaling also requires nonzero variance in the retained variables.
+The test subset may retain too few variable PACs after count filtering. Inspect sample coverage before interpreting PCA results.
 
 #### Analyze PAC counts
 

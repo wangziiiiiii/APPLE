@@ -4,7 +4,7 @@
 \alias{buildGenomicRanges}
 \title{Construct genomic ranges}
 \usage{
-buildGenomicRanges(seqname,position,score,strand)
+buildGenomicRanges(seqname, position, score, strand = "*", five_prime_end)
 }
 \arguments{
 \item{seqname}{A vector containing the sequence (Chromosomes/Contigs) names of poly(A) sites.}
@@ -14,6 +14,8 @@ buildGenomicRanges(seqname,position,score,strand)
 \item{score}{A numeric vector containing the numbers of reads supporting each poly(A) site.}
 
 \item{strand}{A character vector containing the strand information of poly(A) sites.}
+
+\item{five_prime_end}{A numeric vector of read 5-prime coordinates.}
 }
 \value{
 A Granges object.

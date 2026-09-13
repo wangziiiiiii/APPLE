@@ -1,7 +1,7 @@
 Package: APPLE
 Type: Package
 Title: Analysis Pipeline for PolyA-length and PolyA-site
-Version: 0.1.0
+Version: 1.0.0
 Authors@R: c(
     person(
       "Jane", "Doe",
@@ -33,7 +33,6 @@ Imports:
     rtracklayer,
     Rsamtools,
     DESeq2,
-    ggbio,
     readr,
     BiocGenerics, 
     GenomeInfoDb,
@@ -45,15 +44,20 @@ Imports:
     tidyselect,
     data.table,
     parallel,
-    DEXSeq
+    plyranges,
+    rlang,
+    txdbmaker
 Suggests: 
     testthat,
     knitr,
     rmarkdown,
     BiocManager
-VignetteBuilder: knitr
-SystemRequirements(optional): 
+SystemRequirements: 
     bedtools (>= 2.30.0),
     samtools (>= 1.13),
     minimap2 (>= 2.24)
-RoxygenNote: 7.3.3
+URL: https://github.com/wangziiiiiii/APPLE.R
+BugReports: https://github.com/wangziiiiiii/APPLE.R/issues
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.0.0

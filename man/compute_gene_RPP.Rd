@@ -15,11 +15,13 @@ compute_gene_RPP(
 }
 \arguments{
 \item{polyA}{A data frame containing APA site information. Must include:
-- Columns named as in `sample_names` (counts per sample).
-- Columns specified by `type_col`, `gene_id_col`, `strand_col`, `center_col`.
-- Row names should be unique site identifiers (used as `cluster_id`).}
+\itemize{
+\item Columns named as in \code{sample_names} (counts per sample).
+\item Columns specified by \code{type_col}, \code{gene_id_col}, \code{strand_col}, \code{center_col}.
+\item Row names should be unique site identifiers (used as \code{cluster_id}).
+}}
 
-\item{sample_names}{Character vector of sample names (must be columns in `polyA`).}
+\item{sample_names}{Character vector of sample names (must be columns in \code{polyA}).}
 
 \item{type_col}{Name of the column containing site type (default: "type").}
 
@@ -31,14 +33,16 @@ compute_gene_RPP(
 }
 \value{
 A data frame with one row per gene and columns:
-  - `gene_id`: gene identifier (from `gene_id_col`).
-  - One column per sample (named as in `sample_names`) containing the RPP score.
+\itemize{
+\item \code{gene_id}: gene identifier (from \code{gene_id_col}).
+\item One column per sample (named as in \code{sample_names}) containing the RPP score.
+}
 }
 \description{
 This function processes APA (alternative polyadenylation) site data to
 compute gene-level RPP scores. It filters out intergenic sites, retains
 only genes with at least two APA sites, calculates a rank-based weight
-(`ps_rank`) based on site position and strand, normalizes counts per
+(\code{ps_rank}) based on site position and strand, normalizes counts per
 sample to proportions, weights each site by its rank, and finally sums
 the weighted proportions per gene.
 }

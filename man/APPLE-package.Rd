@@ -2,71 +2,24 @@
 % Please edit documentation in R/APPLE.R
 \docType{package}
 \name{APPLE-package}
-\alias{APPLE-package}
 \alias{APPLE}
-\title{APPLE: Analysis of Poly(A) Lengths and Expression}
+\alias{APPLE-package}
+\title{APPLE: poly(A) sites and tail-length analysis}
 \description{
-The 'APPLE' package provides a comprehensive workflow for analyzing poly(A) tail
-lengths and alternative polyadenylation (APA) from sequencing data. It supports
-the entire analysis pipeline: from raw SAM/BED file processing, poly(A) site
-clustering, tail length extraction, to statistical testing for differential
-polyadenylation between multiple experimental conditions.
+Align reads, extract poly(A) sites and tails, remove internal priming,
+cluster and annotate sites, and compare tail lengths and APA usage.
 }
-\details{
-The main features of APPLE include:
-\itemize{
-  \item **Data import and preprocessing**: Functions to read SAM files, detect
-        poly(A) tails (using pt tags or regex), and generate BED files with
-        tail length information (\code{\link{Extract_polyAsite}}, \code{\link{Load.PolyA}}).
-  \item **Poly(A) site clustering**: Weighted density peak clustering to define
-        Poly(A) Clusters (PACs) (\code{\link{Cluster.PolyA}}).
-  \item **Tail length mapping**: Map individual mRNA tail lengths to PACs
-        (\code{\link{mapTail}}).
-  \item **Annotation and filtering**: Annotate PACs with genomic features
-        (\code{\link{Annotate.PolyA}}) and filter low-count PACs (\code{\link{Filter.PolyA}}).
-  \item **Statistical analysis**: Perform differential polyadenylation analysis
-        using various approaches:
-        \itemize{
-          \item mRNA-level t-test, Wilcoxon, or linear mixed models for multiple
-                treatment groups vs control (\code{\link{polyAlength}}).
-          \item Quantify APA dynamics among split, canonical, or whole-gene PACs
-                (\code{\link{Quantify.SplitAPA}}, \code{\link{Quantify.CanonicalAPA}},
-                \code{\link{Quantify.CNCAPA}}, \code{\link{Quantify.GeneAPA}}).
-          \item Principal Component Analysis on tail length matrices
-                (\code{\link{tail_pca}}).
-        }
-  \item **Visualization**: PCA plots, UMAP, and DESeq2-based sample quality
-        assessment (\code{\link{DESeq2.PolyA}}).
-  \item **Utility functions**: Save tail length tables (\code{\link{Save.TailLengths}}),
-        search for poly(A) signals (\code{\link{Motif.Search}}), and generate
-        analysis summaries (\code{\link{summarize_mRNA_level_results_multi}}).
+\seealso{
+\code{\link[=minimap2]{minimap2()}}, \code{\link[=Extract_polyAsite]{Extract_polyAsite()}}, \code{\link[=Load.PolyA]{Load.PolyA()}},
+\code{\link[=Remove.IP]{Remove.IP()}}, \code{\link[=Cluster.PolyA]{Cluster.PolyA()}}, \code{\link[=Annotate.PolyA]{Annotate.PolyA()}}, \code{\link[=Filter.PolyA]{Filter.PolyA()}},
+\code{\link[=Map.Tail]{Map.Tail()}}, \code{\link[=Tail.PCA]{Tail.PCA()}}, \code{\link[=Tail.DiffPair]{Tail.DiffPair()}}, \code{\link[=Quantify.GeneAPA]{Quantify.GeneAPA()}}
 }
-
-The package defines an S4 class \code{\linkS4class{QuantifyPolyA}} that holds
-all raw and processed data throughout the workflow.
-}
-\note{
-This package is designed for users familiar with poly(A) tail sequencing assays
-(e.g., PAT-seq, PAL-seq, FLAM-seq) and R/Bioconductor.
-}
-\section{Package options}{
-
-No specific options are currently defined.
-}
-
-\section{Dependencies}{
-
-APPLE relies on several CRAN and Bioconductor packages, including:
-\code{lme4}, \code{lmerTest}, \code{ggplot2}, \code{dplyr}, \code{tidyr},
-\code{matrixStats}, \code{data.table}, \code{parallel}, \code{pbmcapply},
-\code{GenomicRanges}, \code{Rsamtools}, \code{rtracklayer}, \code{plyranges},
-\code{DESeq2}, \code{ggbio}, \code{FactoMineR}, \code{factoextra}, \code{uwot},
-and others. Most of these are automatically installed when installing the package
-via \code{BiocManager::install("APPLE")} (once submitted to Bioconductor) or
-manually from CRAN/Bioconductor.
-}
-
 \author{
-* Contributor 1
-* Contributor 2
+\strong{Maintainer}: Jane Doe \email{jane@example.com}
+
+Authors:
+\itemize{
+  \item Jane Doe \email{jane@example.com}
+}
+
 }

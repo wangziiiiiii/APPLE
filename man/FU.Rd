@@ -14,7 +14,7 @@ FU(s1, s2, score)
 \item{score}{A numeric vector containing the genomic coordinates of PACs.}
 }
 \value{
-A numeric value in a range of [-1,1].
+A numeric value between -1 and 1.
 }
 \description{
 Calculate the Pearson correlation coefficient of two PAC vectors.

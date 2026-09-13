@@ -4,12 +4,14 @@
 \alias{findPeaks}
 \title{Cluster the one-dimensional poly(A) sites into groups based on local density}
 \usage{
-findPeaks(sub_pos,sub_wts,min_delta=24)
+findPeaks(sub_pos, sub_wts, sub_five_prime_end, min_delta = 24)
 }
 \arguments{
 \item{sub_pos}{The genomic coordinates of poly(A) sites.}
 
 \item{sub_wts}{The numbers of reads support each poly(A) site in 'sub_pos'.}
+
+\item{sub_five_prime_end}{Read 5-prime coordinates corresponding to sub_pos.}
 
 \item{min_delta}{A cutoff to limit the minimum distance between two centers.}
 }
