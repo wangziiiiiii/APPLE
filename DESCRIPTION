@@ -51,7 +51,9 @@ Suggests:
     testthat,
     knitr,
     rmarkdown,
-    BiocManager
+    BiocManager,
+    DEXSeq,
+    BiocParallel
 SystemRequirements: 
     bedtools (>= 2.30.0),
     samtools (>= 1.13),
@@ -61,3 +63,4 @@ BugReports: https://github.com/wangziiiiiii/APPLE.R/issues
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.0.0
+

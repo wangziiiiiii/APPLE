@@ -24,6 +24,8 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.5 Differential PAC counts](#35-differential-pac-counts)
   - [3.6 Gene-level APA analysis](#36-gene-level-apa-analysis)
 - [4. Worked example](#4-worked-example)
+  - [4.1 Example result tables](#41-example-result-tables)
+  - [4.2 Example figures](#42-example-figures)
 
 ## 1. Introduction
 
@@ -33,66 +35,25 @@ These analyses address different questions: changes in tail length, changes in s
 
 ## 2. Installation
 
-Use Linux for the complete workflow. APPLE uses R packages for analysis and external command-line tools for alignment and file processing.
+Use Linux for the complete workflow, which invokes command-line tools and uses multicore processing. Install external tools separately and make sure they are available on your PATH.
 
-### System requirements
+### Install dependencies and APPLE
 
-These programs are not R packages and therefore cannot be installed through DESCRIPTION.
-
-| Program | Minimum version | Used for |
-| --- | --- | --- |
-| `minimap2` | 2.24 | Optional FASTQ alignment performed by `minimap2()` |
-| `samtools` | 1.13 | SAM filtering and sorting |
-| `bedtools` | 2.30.0 | Genomic interval processing |
-| `sort` | System utility | Sorting intermediate BED files |
-
-For example, Conda users can install the three bioinformatics programs with:
-
-```
-conda install -c conda-forge -c bioconda minimap2 samtools bedtools
-```
-
-Confirm that each command is available on `PATH` before running the full workflow.
-
-### R dependencies
-
-The following runtime dependencies are declared in `DESCRIPTION`. They are installed automatically when APPLE is installed with dependency resolution enabled.
-
-| Source | Packages |
-| --- | --- |
-| CRAN | bedr, stringr, dplyr, tidyr, matrixStats, pbmcapply, FactoMineR, factoextra, ggplot2, uwot, lme4, lmerTest, readr, outliers, tidyselect, data.table, rlang |
-| Bioconductor | GenomicRanges, GenomicFeatures, rtracklayer, Rsamtools, DESeq2, BiocGenerics, GenomeInfoDb, IRanges, S4Vectors, SummarizedExperiment, plyranges, txdbmaker |
-| Included with R | methods, parallel |
-
-The packages under `Suggests` are used for development and testing and are not required for normal analysis.
-
-### Install APPLE and its R dependencies
+Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. Bioconductor repositories are needed for the genomic analysis dependencies.
 
 ```
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
-
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes")
 }
-
 options(repos = BiocManager::repositories())
-
-remotes::install_github(
-  "wangziiiiiii/APPLE.R",
-  dependencies = NA,
-  upgrade = "never"
-)
-
+remotes::install_github("wangziiiiiii/APPLE.R")
 library(APPLE)
 ```
 
-`dependencies = NA` installs packages listed under `Depends`, `Imports`, and `LinkingTo`, including the CRAN and Bioconductor dependencies above. `upgrade = "never"` prevents the installer from upgrading unrelated packages already present in the user's library.
-
-Because this repository is currently private, installation also requires a GitHub account with repository access and a valid `GITHUB_PAT` or another credential recognized by `remotes`. The repository must be made public, or the source package distributed separately, before users without repository access can install it.
-
-Loading APPLE does not install packages, connect to the internet, or attach dependency packages to the user's search path.
+While the repository is private, installation requires GitHub authentication with access to APPLE.R. Loading APPLE does not install packages or attach dependency packages to the search path.
 
 **API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
@@ -547,18 +508,21 @@ The example screening rule **pd > 0.1 and p.value < 0.05** can be applied explic
 
 ## 4. Worked example
 
-This example uses the six FASTQ files in the repository's [test directory](test): two NC samples, two Fip1 samples, and two Fip2 samples. The supplied test reads have undergone primer removal. Small test subsets are intended to illustrate the workflow; filtering, statistical tests, and visualizations depend on the retained coverage.
+This worked example uses six bundled chromosome 22 BED files: two NC controls, two Fip1 samples, and two Fip2 samples. Each file retains complete site counts and tail-length lists from the same genomic region, allowing the core workflow and pairwise comparisons to be demonstrated without downloading the original FASTQ files.
 
-#### Prepare files and paths
+| Group | Replicates | Approximate reads per file |
+| --- | ---: | ---: |
+| NC | 2 | 101,000-109,000 |
+| Fip1 | 2 | 126,000-128,000 |
+| Fip2 | 2 | 102,000-104,000 |
 
-Download the test FASTQ files into one directory. Obtain the GRCh38 primary-assembly FASTA and the matching release 113 GTF from the [Ensembl human FASTA directory](https://ftp.ensembl.org/pub/release-113/fasta/homo_sapiens/dna/) and [GTF directory](https://ftp.ensembl.org/pub/release-113/gtf/homo_sapiens/). Prepare an uncompressed FASTA and GTF, and use matching chromosome names.
+The BED files are installed with APPLE under `inst/extdata/chr22`. Internal-priming removal and annotation still require the complete GRCh38 primary-assembly FASTA and matching Ensembl release 113 GTF. Chromosome names must agree between the BED, FASTA, and GTF files; this example uses names such as `22`, `X`, and `MT` without a `chr` prefix.
 
-Replace the paths below before running the example. Use absolute paths because extraction changes the working directory.
+#### Prepare the reference paths
 
-```
+```r
 library(APPLE)
 
-work_dir <- normalizePath("/path/to/test", mustWork = TRUE)
 reference <- normalizePath(
   "/path/to/Homo_sapiens.GRCh38.dna.primary_assembly.fa",
   mustWork = TRUE
@@ -568,58 +532,48 @@ annotation <- normalizePath(
   mustWork = TRUE
 )
 
-```
-
-#### Align reads and extract sites
-
-```
-sam_files <- minimap2(
-  reference = reference,
-  work_dir = work_dir,
-  threads = 4,
-  filter_flags = 2308
+bed_dir <- system.file("extdata", "chr22", package = "APPLE")
+bed_files <- list.files(
+  bed_dir,
+  pattern = "\\.bed$",
+  full.names = TRUE
 )
+stopifnot(length(bed_files) == 6L)
 
-extraction_stats <- Extract_polyAsite(
-  work_dir = work_dir,
-  intron_max = 50000,
-  min_tail_length = 6,
-  sample_size = 10000,
-  bedtools_path = "bedtools",
-  remove_temp_files = TRUE
-)
-
+cores <- if (.Platform$OS.type == "windows") 1L else 4L
 ```
 
-#### Load, cluster, annotate, and filter PACs
+Using one core on Windows avoids the limitations of fork-based parallel processing. Linux and macOS users can increase `cores` according to the available memory and processors.
 
-Select the final BED files corresponding to the alignments, rather than unrelated BED files in the directory.
+#### Load and process the example BED files
 
-```
-bed_files <- sub("\\.sam$", ".bed", unname(sam_files))
-stopifnot(all(file.exists(bed_files)))
-
+```r
 QpolyA <- Load.PolyA(files = bed_files)
 QpolyA <- Remove.IP(QpolyA, fasta = reference)
-QpolyA <- Cluster.PolyA(QpolyA, max.gapwidth = 24, mc.cores = 4)
-QpolyA <- Annotate.PolyA(QpolyA, gff = annotation)
-QpolyA <- Filter.PolyA(QpolyA, min_count = 10, min_sample = 2)
-QpolyA <- Map.Tail(QpolyA)
-
-```
-
-#### Define sample metadata
-
-Load.PolyA() derives sample names from BED file basenames. Preserve those exact names in the metadata. The condition labels below are derived from the NC, Fip1, and Fip2 filename prefixes in this test dataset.
-
-```
-sample_names <- QpolyA@sample_names
-conditions <- sub("-.*$", "", sample_names)
-stopifnot(
-  length(sample_names) == 6L,
-  all(conditions %in% c("NC", "Fip1", "Fip2")),
-  all(table(factor(conditions, levels = c("NC", "Fip1", "Fip2"))) == 2L)
+QpolyA <- Cluster.PolyA(
+  QpolyA,
+  max.gapwidth = 24,
+  mc.cores = cores
 )
+QpolyA <- Annotate.PolyA(
+  QpolyA,
+  gff = annotation
+)
+QpolyA <- Filter.PolyA(
+  QpolyA,
+  min_count = 10,
+  min_sample = 2
+)
+QpolyA <- Map.Tail(QpolyA)
+```
+
+#### Define the experimental groups
+
+`Load.PolyA()` derives each sample name from its BED filename. The following code converts `NC-1`, `Fip1-2`, and similar names into their condition labels.
+
+```r
+sample_names <- QpolyA@sample_names
+conditions <- sub("-[12]$", "", sample_names)
 
 sample_info <- data.frame(
   sample = sample_names,
@@ -629,68 +583,77 @@ sample_info <- data.frame(
 )
 
 colData <- data.frame(
-  condition = factor(conditions, levels = c("NC", "Fip1", "Fip2")),
+  condition = factor(
+    conditions,
+    levels = c("NC", "Fip1", "Fip2")
+  ),
   row.names = sample_names
 )
-
 ```
 
-Here, each sample is treated as a separate library. For other datasets, assign lib_id according to the actual experimental design.
+#### Compare poly(A) tail lengths
 
-#### Compare tail lengths
+The supplied analysis used raw tail lengths, a minimum of 10 mRNA observations per condition, and thresholds of `q_value < 0.05` and an absolute mean difference greater than 15 nt. These are example screening thresholds rather than universal defaults.
 
-Run one contrast and one method per call. Repeat with test_method = "wilcoxon" or "lmm" when appropriate for the analysis.
+```r
+tail_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
+  pair_info <- sample_info[
+    sample_info$condition %in% c("NC", treatment),
+    ,
+    drop = FALSE
+  ]
 
-```
-tail_results <- Tail.DiffPair(
-  QpolyA = QpolyA,
-  sample_info = sample_info,
-  control_group = "NC",
-  treatment_group = "Fip1",
-  test_method = "t_test",
-  min_mRNA_per_condition = 10,
-  logscale = TRUE,
-  mc.cores = 4
-)
+  result <- Tail.DiffPair(
+    QpolyA = QpolyA,
+    sample_info = pair_info,
+    control_group = "NC",
+    treatment_group = treatment,
+    test_method = "t_test",
+    min_mRNA_per_condition = 10,
+    logscale = FALSE,
+    mc.cores = cores
+  )
 
-head(tail_results)
+  result$sig <- ifelse(
+    result$q_value < 0.05 & result$mean_diff > 15,
+    "Lengthening",
+    ifelse(
+      result$q_value < 0.05 & result$mean_diff < -15,
+      "Shortening",
+      "NS"
+    )
+  )
+  result
+})
+names(tail_results) <- c("Fip1", "Fip2")
 ```
 
 #### Explore tail-length variation
 
-```
-tail_pca_results <- Tail.PCA(
-  QpolyA = QpolyA,
-  sample_info = sample_info,
-  summary_stat = "mean",
+The example uses the median tail length of each retained PAC in each sample.
+
+```r
+tail_pca <- Tail.PCA(
+  QpolyA,
+  sample_info,
+  summary_stat = "median",
   min_count_per_sample = 10,
-  cores = 4,
+  cores = cores,
   show_progress = TRUE
 )
 
-head(tail_pca_results$pca$x)
+head(tail_pca$pca$x)
 ```
 
-The test subset may retain too few variable PACs after count filtering. Inspect sample coverage before interpreting PCA results.
+#### Quantify gene-level APA shifts
 
-#### Analyze PAC counts
-
-```
-pac_results <- DESeq2.PolyA(QpolyA, colData)
-
-```
-
-The returned list contains DESeq2.Result, PCA.Plot, and UMAP.Plot. The wrapper runs both visualizations; UMAP and VST can require more samples or adequate counts than a small demonstration subset provides.
-
-#### Quantify APA changes and join directional scores
-
-```
+```r
 gene_RPP <- compute_gene_RPP(
   polyA = QpolyA@polyA,
-  sample_names = rownames(colData)
+  sample_names = sample_names
 )
 
-apa_by_condition <- lapply(c("Fip1", "Fip2"), function(treatment) {
+apa_results <- lapply(c("Fip1", "Fip2"), function(treatment) {
   apa <- Quantify.GeneAPA(
     QpolyA,
     colData,
@@ -705,22 +668,55 @@ apa_by_condition <- lapply(c("Fip1", "Fip2"), function(treatment) {
   )
 
   result <- dplyr::left_join(apa, delta, by = "gene_id")
-  result$contrast <- paste(treatment, "vs NC")
+  result$contrast <- paste(treatment, "v.s. NC")
   result
 })
 
-DEAPA_gene <- dplyr::bind_rows(apa_by_condition)
-
-# Illustrative screening rule; see the P-value interpretation in section 3.6.
-screened_APA <- dplyr::filter(
-  DEAPA_gene,
-  !is.na(pd),
-  !is.na(p.value),
-  pd > 0.1,
-  p.value < 0.05
-)
-
-head(DEAPA_gene)
+DEAPA_gene <- dplyr::bind_rows(apa_results)
 ```
 
-The joined table contains gene_id, pd, r, p.value, delta_RPP, and contrast. Check sample coverage before interpreting the direction or strength of a change.
+The complete reproducible script also calculates DEXSeq gene-level adjusted P values and PAS-level usage changes, writes the four result tables, and saves the figures with descriptive filenames. It requires the optional Bioconductor packages `DEXSeq` and `BiocParallel`:
+
+```r
+BiocManager::install(c("DEXSeq", "BiocParallel"))
+
+example_script <- system.file(
+  "examples",
+  "chr22_worked_example.R",
+  package = "APPLE"
+)
+file.copy(example_script, "chr22_worked_example.R")
+file.edit("chr22_worked_example.R")
+source("chr22_worked_example.R")
+```
+
+The script is also available directly at [inst/examples/chr22_worked_example.R](inst/examples/chr22_worked_example.R). Edit the two reference paths at the beginning before running it. Outputs are written to a new `APPLE-example-output` directory, so the bundled example files remain unchanged.
+
+### 4.1 Example result tables
+
+| File | Rows | Contents |
+| --- | ---: | --- |
+| [DEAPA_gene.csv](docs/example-results/DEAPA_gene.csv) | 222 | Gene-level PD, correlation, adjusted P value, delta RPP, and annotation |
+| [DEAPA_PAS.csv](docs/example-results/DEAPA_PAS.csv) | 562 | PAS-level DEXSeq statistics, delta PSU, and annotation |
+| [polyA_tail_diff.NC_Fip1.tsv](docs/example-results/polyA_tail_diff.NC_Fip1.tsv) | 453 | NC versus Fip1 tail-length statistics |
+| [polyA_tail_diff.NC_Fip2.tsv](docs/example-results/polyA_tail_diff.NC_Fip2.tsv) | 434 | NC versus Fip2 tail-length statistics |
+
+The CSV files were saved without R row-number columns. The TSV files contain one row per tested PAC and include raw-scale descriptive statistics, effect sizes, P values, BH-adjusted q values, and the example significance category.
+
+### 4.2 Example figures
+
+<table>
+<tr>
+<td align="center" width="50%"><img src="docs/images/example/deapa-volcano.png" alt="Differential APA volcano plot"><br><b>Gene-level APA shifts</b></td>
+<td align="center" width="50%"><img src="docs/images/example/tail-pca.png" alt="Poly(A) tail length PCA"><br><b>Tail-length PCA</b></td>
+</tr>
+<tr>
+<td align="center" width="50%"><img src="docs/images/example/tail-diff-fip1.png" alt="NC versus Fip1 tail-length volcano plot"><br><b>NC versus Fip1</b></td>
+<td align="center" width="50%"><img src="docs/images/example/tail-diff-fip2.png" alt="NC versus Fip2 tail-length volcano plot"><br><b>NC versus Fip2</b></td>
+</tr>
+</table>
+
+Additional figures: [DEAPA gene counts](docs/images/example/deapa-gene-counts.png), [differential PAS counts](docs/images/example/deapa-pas-counts.png), [tail-length density](docs/images/example/tail-density.png), and [tail-length significance groups](docs/images/example/tail-significance-groups.png).
+
+With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for Fip1 versus NC, and 15 distal and 2 proximal genes for Fip2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PACs for Fip1, and 5 lengthening and 3 shortening PACs for Fip2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+
