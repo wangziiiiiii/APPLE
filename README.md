@@ -33,25 +33,66 @@ These analyses address different questions: changes in tail length, changes in s
 
 ## 2. Installation
 
-Use Linux for the complete workflow, which invokes command-line tools and uses multicore processing. Install external tools separately and make sure they are available on your PATH.
+Use Linux for the complete workflow. APPLE uses R packages for analysis and external command-line tools for alignment and file processing.
 
-### Install dependencies and APPLE
+### System requirements
 
-Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. Bioconductor repositories are needed for the genomic analysis dependencies.
+These programs are not R packages and therefore cannot be installed through DESCRIPTION.
+
+| Program | Minimum version | Used for |
+| --- | --- | --- |
+| `minimap2` | 2.24 | Optional FASTQ alignment performed by `minimap2()` |
+| `samtools` | 1.13 | SAM filtering and sorting |
+| `bedtools` | 2.30.0 | Genomic interval processing |
+| `sort` | System utility | Sorting intermediate BED files |
+
+For example, Conda users can install the three bioinformatics programs with:
+
+```
+conda install -c conda-forge -c bioconda minimap2 samtools bedtools
+```
+
+Confirm that each command is available on `PATH` before running the full workflow.
+
+### R dependencies
+
+The following runtime dependencies are declared in `DESCRIPTION`. They are installed automatically when APPLE is installed with dependency resolution enabled.
+
+| Source | Packages |
+| --- | --- |
+| CRAN | bedr, stringr, dplyr, tidyr, matrixStats, pbmcapply, FactoMineR, factoextra, ggplot2, uwot, lme4, lmerTest, readr, outliers, tidyselect, data.table, rlang |
+| Bioconductor | GenomicRanges, GenomicFeatures, rtracklayer, Rsamtools, DESeq2, BiocGenerics, GenomeInfoDb, IRanges, S4Vectors, SummarizedExperiment, plyranges, txdbmaker |
+| Included with R | methods, parallel |
+
+The packages under `Suggests` are used for development and testing and are not required for normal analysis.
+
+### Install APPLE and its R dependencies
 
 ```
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
+
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes")
 }
+
 options(repos = BiocManager::repositories())
-remotes::install_github("wangziiiiiii/APPLE.R")
+
+remotes::install_github(
+  "wangziiiiiii/APPLE.R",
+  dependencies = NA,
+  upgrade = "never"
+)
+
 library(APPLE)
 ```
 
-While the repository is private, installation requires GitHub authentication with access to APPLE.R. Loading APPLE does not install packages or attach dependency packages to the search path.
+`dependencies = NA` installs packages listed under `Depends`, `Imports`, and `LinkingTo`, including the CRAN and Bioconductor dependencies above. `upgrade = "never"` prevents the installer from upgrading unrelated packages already present in the user's library.
+
+Because this repository is currently private, installation also requires a GitHub account with repository access and a valid `GITHUB_PAT` or another credential recognized by `remotes`. The repository must be made public, or the source package distributed separately, before users without repository access can install it.
+
+Loading APPLE does not install packages, connect to the internet, or attach dependency packages to the user's search path.
 
 **API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
