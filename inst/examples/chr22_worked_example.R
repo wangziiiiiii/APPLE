@@ -35,7 +35,7 @@ if (!nzchar(bed_dir)) {
 
 output_dir <- file.path(getwd(), "APPLE-example-output")
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-cores <- if (.Platform$OS.type == "windows") 1L else 4L
+cores <- 12L
 
 control_group <- "NC"
 treatment_groups <- c("EX1", "EX2")
@@ -119,12 +119,10 @@ run_apa_contrast <- function(treatment) {
     transcripts = NULL,
     alternativeCountData = NULL
   )
-  bp <- if (.Platform$OS.type == "windows") {
-    BiocParallel::SerialParam()
-  } else {
-    BiocParallel::MulticoreParam(workers = cores)
-  }
-  dxd <- DEXSeq::DEXSeq(dxd, BPPARAM = bp)
+  dxd <- DEXSeq::DEXSeq(
+    dxd,
+    BPPARAM = BiocParallel::MulticoreParam(workers = 10)
+  )
 
   gene_q <- DEXSeq::perGeneQValue(dxd)
   gene_q <- data.frame(

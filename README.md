@@ -303,7 +303,7 @@ results <- Tail.DiffPair(
 | `test_method` | One of "t_test", "wilcoxon", or "lmm"; default "t_test". |
 | `logscale` | Apply log2 transformation for testing; default TRUE. |
 | `min_mRNA_per_condition` | Minimum number of positive mRNA tail lengths per group and PAC; default 10. |
-| `mc.cores` | Number of processing cores; default 4. Use 1 on Windows. |
+| `mc.cores` | Number of processing cores; default 4. |
 
 #### Output
 
@@ -342,7 +342,7 @@ pca_results <- Tail.PCA(
 | `sample_info` | Metadata containing sample and condition, optionally lib_id. |
 | `summary_stat` | Per-PAC summary: "mean" (default) or "median". |
 | `min_count_per_sample` | Minimum positive tail observations per PAC and sample; default 10. |
-| `cores` | Number of processing cores; default 4. Use 1 on Windows. |
+| `cores` | Number of processing cores; default 4. |
 | `show_progress` | Show progress during sample processing; default TRUE. |
 
 #### Output
@@ -539,10 +539,8 @@ bed_files <- list.files(
 )
 stopifnot(length(bed_files) == 6L)
 
-cores <- if (.Platform$OS.type == "windows") 1L else 4L
+cores <- 12L
 ```
-
-Using one core on Windows avoids the limitations of fork-based parallel processing. Linux and macOS users can increase `cores` according to the available memory and processors.
 
 #### Load and process the example BED files
 
@@ -673,23 +671,6 @@ apa_results <- lapply(c("EX1", "EX2"), function(treatment) {
 
 DEAPA_gene <- dplyr::bind_rows(apa_results)
 ```
-
-The complete reproducible script also calculates DEXSeq gene-level adjusted P values and PAS-level usage changes, and saves its outputs with descriptive filenames. It requires the optional Bioconductor packages `DEXSeq` and `BiocParallel`:
-
-```r
-BiocManager::install(c("DEXSeq", "BiocParallel"))
-
-example_script <- system.file(
-  "examples",
-  "chr22_worked_example.R",
-  package = "APPLE"
-)
-file.copy(example_script, "chr22_worked_example.R")
-file.edit("chr22_worked_example.R")
-source("chr22_worked_example.R")
-```
-
-The script is also available directly at [inst/examples/chr22_worked_example.R](inst/examples/chr22_worked_example.R). Edit the two reference paths at the beginning before running it. Outputs are written to a new `APPLE-example-output` directory, so the bundled example files remain unchanged.
 
 ### 4.1 Example figures
 
