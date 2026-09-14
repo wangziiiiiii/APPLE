@@ -1,4 +1,4 @@
-<h1><img src="docs/images/apple-wordmark.svg" alt="APPLE.R" width="450"></h1>
+<h1><img src="docs/images/apple-wordmark.svg" alt="APPLE" width="390"></h1>
 
 ![Version 1.0](docs/images/version-1.0.svg)
 
@@ -28,7 +28,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 
 ## 1. Introduction
 
-APPLE analyzes poly(A) site usage and tail-length measurements from sequencing data. It groups nearby sites into poly(A) site clusters (PACs), annotates their genomic context, and builds sample-level PAC count data. Downstream functions compare individual mRNA tail lengths, analyze PAC abundance, and summarize shifts in within-gene PAC usage.
+APPLE analyzes poly(A) site usage and tail-length measurements from sequencing data. It groups nearby sites into poly(A) site clusters (PACs), annotates their genomic context, and builds sample-level PAC count data. Downstream functions compare individual mRNA tail lengths, analyze PAC abundance, and summarize shifts in within-gene PAC usage.\n\n### Why APPLE?\n\n**APPLE** stands for **A**lternative **P**olyadenylation [APA] and **P**oly(A) **L**ength **E**stimation. The name captures the two central dimensions of the software: where transcripts are polyadenylated and how long their poly(A) tails are.
 
 These analyses address different questions: changes in tail length, changes in site abundance, and redistribution among sites within the same gene. Input reads and tail-length annotations must be prepared for the extraction workflow described below.
 
@@ -52,7 +52,7 @@ remotes::install_github("wangziiiiiii/APPLE.R")
 library(APPLE)
 ```
 
-While the repository is private, installation requires GitHub authentication with access to APPLE.R. Loading APPLE does not install packages or attach dependency packages to the search path.
+While the repository is private, installation requires GitHub authentication with access to the APPLE repository. Loading APPLE does not install packages or attach dependency packages to the search path.
 
 
 ## 3. Workflow
