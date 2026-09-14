@@ -54,7 +54,6 @@ library(APPLE)
 
 While the repository is private, installation requires GitHub authentication with access to APPLE.R. Loading APPLE does not install packages or attach dependency packages to the search path.
 
-**API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
 ## 3. Workflow
 
