@@ -24,7 +24,8 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.5 Differential PAC counts](#35-differential-pac-counts)
   - [3.6 Gene-level APA analysis](#36-gene-level-apa-analysis)
 - [4. Worked example](#4-worked-example)
-  - [4.1 Example figures](#41-example-figures)
+  - [4.1 Plot results](#41-plot-results)
+  - [4.2 Example figures](#42-example-figures)
 
 ## 1. Introduction
 
@@ -675,7 +676,106 @@ apa_results <- lapply(c("EX1", "EX2"), function(treatment) {
 DEAPA_gene <- dplyr::bind_rows(apa_results)
 ```
 
-### 4.1 Example figures
+### 4.1 Plot results
+
+The plotting functions return `ggplot` objects. Printing an object displays it, and `ggplot2::ggsave()` can save it to a file. The default colors, thresholds, labels, and themes reproduce the supplied analysis scripts.
+
+#### Tail-length plots
+
+```r
+# PCA and density plots use the Tail.PCA() result.
+p_tail_pca <- Plot.TailPCA(tail_pca)
+p_tail_density <- Plot.TailDensity(tail_pca)
+
+# Volcano plots use one Tail.DiffPair() result at a time.
+p_tail_ex1 <- Plot.TailVolcano(
+  tail_results[["EX1"]],
+  title = "EX1 vs NC"
+)
+p_tail_ex2 <- Plot.TailVolcano(
+  tail_results[["EX2"]],
+  title = "EX2 vs NC"
+)
+
+print(p_tail_pca)
+print(p_tail_density)
+print(p_tail_ex1)
+print(p_tail_ex2)
+```
+
+The defaults classify a PAC as lengthening or shortening when `q_value < 0.05` and the absolute mean difference is greater than 15 nt. These values can be changed with `q_cutoff` and `mean_diff_cutoff`.
+
+#### PAS-expression plots
+
+```r
+pac_results <- DESeq2.PolyA(QpolyA, colData)
+
+# PCA accepts the complete DESeq2.PolyA() result.
+p_pas_pca <- Plot.PASPCA(pac_results)
+
+# Build one DESeq2 result table for each treatment-control comparison.
+pas_results <- lapply(c("EX1", "EX2"), function(treatment) {
+  as.data.frame(
+    DESeq2::lfcShrink(
+      pac_results$DESeq2.Result,
+      contrast = c("condition", treatment, "NC"),
+      type = "normal"
+    )
+  )
+})
+names(pas_results) <- c("EX1", "EX2")
+
+p_pas_ex1 <- Plot.PASVolcano(
+  pas_results[["EX1"]],
+  treatment_group = "EX1"
+)
+p_pas_ex2 <- Plot.PASVolcano(
+  pas_results[["EX2"]],
+  treatment_group = "EX2"
+)
+
+print(p_pas_pca)
+print(p_pas_ex1)
+print(p_pas_ex2)
+```
+
+#### Differential APA plots
+
+The DEAPA volcano and summary bars use the DEXSeq-enhanced tables from the differential APA workflow. `DEAPA_gene` must contain `pd`, `r`, `qvalue`, and `contrast`. The optional PAS-level bar chart uses `DEAPA_PAS` with `delta_PSU`, `padj`, and `contrast`.
+
+```r
+p_deapa_volcano <- Plot.DEAPAVolcano(DEAPA_gene)
+
+# Overall numbers of distal and proximal genes.
+p_deapa_gene_counts <- Plot.DEAPACounts(
+  DEAPA_gene,
+  level = "gene"
+)
+
+# Overall numbers of up- and downregulated PASs.
+p_deapa_pas_counts <- Plot.DEAPACounts(
+  DEAPA_PAS,
+  level = "PAS"
+)
+
+print(p_deapa_volcano)
+print(p_deapa_gene_counts)
+print(p_deapa_pas_counts)
+```
+
+For example, save any returned plot at publication resolution:
+
+```r
+ggplot2::ggsave(
+  "tail-pca.png",
+  p_tail_pca,
+  width = 7,
+  height = 6,
+  dpi = 300
+)
+```
+
+### 4.2 Example figures
 
 <table>
 <tr>
