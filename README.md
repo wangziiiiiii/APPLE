@@ -1,6 +1,7 @@
 <h1><img src="docs/images/apple-wordmark.svg" alt="APPLE" width="390"></h1>
 
 ![Version 1.0](docs/images/version-1.0.svg)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 *Analysis of poly(A) tail lengths and alternative polyadenylation in R.*
 
@@ -27,6 +28,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.6 Differential APA analysis](#36-differential-apa-analysis)
 - [4. Worked example](#4-worked-example)
   - [4.1 Example figures](#41-example-figures)
+- [5. License](#5-license)
 
 ## 1. Introduction
 
@@ -724,5 +726,11 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 
 
 With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for EX1 versus NC, and 15 distal and 2 proximal genes for EX2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PACs for EX1, and 5 lengthening and 3 shortening PACs for EX2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+
+## 5. License
+
+Copyright (C) 2026 Zi Wang.
+
+APPLE is open-source software distributed under the [GNU General Public License version 3](LICENSE). You may use, study, modify, and redistribute the software under the terms of that license. Modified and redistributed versions must remain available under the GPL.
 
 
