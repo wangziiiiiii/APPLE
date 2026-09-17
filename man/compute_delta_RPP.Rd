@@ -35,8 +35,9 @@ using a precomputed gene-level RPP matrix. The delta RPP is defined as
 \examples{
 \dontrun{
 # Assuming polyA_rank and colData are available
-delta <- compute_delta_RPP(polyA_rank, colData, "NC", "Fip1")
+delta <- compute_delta_RPP(polyA_rank, colData, "NC", "EX1")
 head(delta)
 }
 
 }
+

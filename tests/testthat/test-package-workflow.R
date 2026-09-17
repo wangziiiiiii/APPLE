@@ -22,7 +22,12 @@ make_tail_fixture <- function() {
 
 test_that("installed namespace exposes the new public API", {
   exports <- getNamespaceExports("APPLE")
-  expect_true(all(c("Remove.IP", "Map.Tail", "Tail.PCA", "Tail.DiffPair") %in% exports))
+  expect_true(all(c(
+    "Remove.IP", "Map.Tail", "Tail.PCA", "Tail.DiffPair", "DEAPA",
+    "Plot.TailPCA", "Plot.TailDensity", "Plot.TailVolcano",
+    "Plot.PASPCA", "Plot.PASVolcano", "Plot.DEAPAVolcano",
+    "Plot.DEAPACounts"
+  ) %in% exports))
   expect_false(any(c("mapTail", "polyAlength", "tail_pca") %in% exports))
 })
 
@@ -84,3 +89,4 @@ test_that("pairwise tests retain raw summaries and apply BH correction", {
     expect_gt(result$mean_diff[result$cluster_id == "PAC1"], 0)
   }
 })
+

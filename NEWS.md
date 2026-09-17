@@ -16,6 +16,8 @@
   statistics, and delta PSU for one or more treatment-versus-control contrasts.
 - Declare DEXSeq and BiocParallel as installed package dependencies and update
   the worked example to use the packaged DEAPA workflow.
+- Integrate `DEAPA()` and all public plotting functions into the main
+  `R/APPLE.R` package source.
 
 ## Migration
 

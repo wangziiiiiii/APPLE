@@ -59,7 +59,7 @@ if (!requireNamespace("remotes", quietly = TRUE)) {
 }
 options(repos = BiocManager::repositories())
 remotes::install_github(
-  "wangziiiiiii/APPLE.R",
+  "wangziiiiiii/APPLE",
   dependencies = NA,
   upgrade = "never"
 )

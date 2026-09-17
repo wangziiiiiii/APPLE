@@ -61,8 +61,8 @@ SystemRequirements:
     bedtools (>= 2.30.0),
     samtools (>= 1.13),
     minimap2 (>= 2.24)
-URL: https://github.com/wangziiiiiii/APPLE.R
-BugReports: https://github.com/wangziiiiiii/APPLE.R/issues
+URL: https://github.com/wangziiiiiii/APPLE
+BugReports: https://github.com/wangziiiiiii/APPLE/issues
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.0.0
