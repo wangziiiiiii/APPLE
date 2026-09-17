@@ -434,7 +434,57 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 | `DEAPA_PAS` | PAS-level table containing featureID, gene_id, exonBaseMean, dispersion, stat, pvalue, padj, delta_PSU, and contrast. |
 | `DEXSeq.Result` | Named list containing the fitted DEXSeq object for every treatment-versus-control comparison. |
 
-Quantify.GeneAPA(), compute_gene_RPP(), and compute_delta_RPP() remain available for users who need the individual intermediate calculations. DEAPA() calls and combines them automatically.
+#### Run the component functions separately
+
+DEAPA() calls and combines three existing APPLE functions. They remain available when only one intermediate calculation is needed.
+
+| Function | Purpose | Main output |
+| --- | --- | --- |
+| `Quantify.GeneAPA()` | Measures how strongly the within-gene PAC usage distribution changes between two conditions. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
+| `compute_gene_RPP()` | Calculates the relative polyadenylation position for every gene in every sample. | One row per gene with `gene_id` and one RPP column per sample. |
+| `compute_delta_RPP()` | Subtracts the control-group mean RPP from the treatment-group mean RPP. | One row per gene with `gene_id` and `delta_RPP`. |
+
+Run `Quantify.GeneAPA()` independently when only PD, the direction statistic, and the chi-squared P-value are required. The contrast order is **metadata column, control, treatment**.
+
+```r
+apa_metrics <- Quantify.GeneAPA(
+  QpolyA = QpolyA,
+  colData = sample_metadata,
+  contrast = c("condition", "Control", "Treatment1")
+)
+```
+
+Calculate sample-level gene RPP values independently with `compute_gene_RPP()`:
+
+```r
+gene_RPP <- compute_gene_RPP(
+  polyA = QpolyA@polyA,
+  sample_names = rownames(sample_metadata)
+)
+```
+
+Use the resulting table to calculate the treatment-minus-control RPP difference:
+
+```r
+delta_RPP <- compute_delta_RPP(
+  polyA_rank = gene_RPP,
+  colData = sample_metadata,
+  control_cond = "Control",
+  treat_cond = "Treatment1"
+)
+```
+
+The two gene-level outputs can be combined by `gene_id`:
+
+```r
+gene_result <- dplyr::left_join(
+  apa_metrics,
+  delta_RPP,
+  by = "gene_id"
+)
+```
+
+These separate calls do not calculate the DEXSeq gene-level `qvalue`, PAS-level `padj`, or `delta_PSU`. Use DEAPA() when those complete differential APA results are required.
 
 #### Poly(A) site usage (PSU)
 
