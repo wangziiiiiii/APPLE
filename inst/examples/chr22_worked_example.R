@@ -79,99 +79,19 @@ gene_annotation <- as.data.frame(rtracklayer::import(annotation)) |>
 polyA <- left_join(polyA, gene_annotation, by = "gene_id")
 polyA$cluster_id <- rownames(QpolyA@polyA)
 
-# Gene-level APA, PAS-level usage, and directional RPP scores.
-APA_Gene <- polyA |>
-  filter(type != "intergenic", !grepl("^ERCC", seqnames)) |>
-  group_by(gene_id) |>
-  filter(n() >= 2) |>
-  ungroup()
-
-polyA_PSU <- APA_Gene |>
-  group_by(gene_id) |>
-  mutate(across(all_of(sample_names), ~ .x / sum(.x))) |>
-  ungroup()
-
-gene_RPP <- compute_gene_RPP(
-  polyA = QpolyA@polyA,
-  sample_names = sample_names
+# Run the complete differential APA workflow. DEAPA() combines
+# Quantify.GeneAPA(), RPP changes, DEXSeq q-values, and PAS-level delta PSU.
+deapa_result <- DEAPA(
+  QpolyA = QpolyA,
+  colData = colData,
+  control = control_group,
+  treatment = treatment_groups,
+  workers = 10
 )
-samples_by_condition <- split(sample_names, conditions)
 
-run_apa_contrast <- function(treatment) {
-  control_samples <- samples_by_condition[[control_group]]
-  treatment_samples <- samples_by_condition[[treatment]]
-  selected_samples <- c(control_samples, treatment_samples)
-  contrast_label <- paste0(treatment, " v.s. ", control_group)
-
-  gene_result <- Quantify.GeneAPA(
-    QpolyA,
-    colData,
-    contrast = c("condition", control_group, treatment)
-  )
-
-  dxd <- DEXSeq::DEXSeqDataSet(
-    countData = APA_Gene[, selected_samples, drop = FALSE],
-    sampleData = colData[selected_samples, , drop = FALSE],
-    design = ~ sample + exon + condition:exon,
-    featureID = APA_Gene$cluster_id,
-    groupID = APA_Gene$gene_id,
-    featureRanges = NULL,
-    transcripts = NULL,
-    alternativeCountData = NULL
-  )
-  dxd <- DEXSeq::DEXSeq(
-    dxd,
-    BPPARAM = BiocParallel::MulticoreParam(workers = 10)
-  )
-
-  gene_q <- DEXSeq::perGeneQValue(dxd)
-  gene_q <- data.frame(
-    gene_id = names(gene_q),
-    qvalue = unname(gene_q),
-    stringsAsFactors = FALSE
-  )
-
-  delta_rpp <- compute_delta_RPP(
-    polyA_rank = gene_RPP,
-    colData = colData,
-    control_cond = control_group,
-    treat_cond = treatment
-  )
-
-  gene_result <- gene_result |>
-    left_join(gene_q, by = "gene_id") |>
-    left_join(delta_rpp, by = "gene_id") |>
-    mutate(contrast = contrast_label)
-
-  pas_result <- as.data.frame(dxd) |>
-    select(
-      featureID,
-      gene_id = groupID,
-      exonBaseMean,
-      dispersion,
-      stat,
-      pvalue,
-      padj
-    ) |>
-    left_join(
-      polyA_PSU |>
-        mutate(
-          delta_PSU =
-            rowMeans(across(all_of(treatment_samples))) -
-            rowMeans(across(all_of(control_samples)))
-        ) |>
-        select(featureID = cluster_id, delta_PSU),
-      by = "featureID"
-    ) |>
-    mutate(contrast = contrast_label)
-
-  list(gene = gene_result, pas = pas_result)
-}
-
-apa_results <- lapply(treatment_groups, run_apa_contrast)
-DEAPA_gene <- bind_rows(lapply(apa_results, function(x) x[["gene"]])) |>
+DEAPA_gene <- deapa_result$DEAPA_gene |>
   left_join(gene_annotation, by = "gene_id")
-DEAPA_PAS <- bind_rows(lapply(apa_results, function(x) x[["pas"]])) |>
+DEAPA_PAS <- deapa_result$DEAPA_PAS |>
   left_join(gene_annotation, by = "gene_id")
 
 write.csv(

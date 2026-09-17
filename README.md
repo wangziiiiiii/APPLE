@@ -24,8 +24,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.5 Differential PAC counts](#35-differential-pac-counts)
   - [3.6 Gene-level APA analysis](#36-gene-level-apa-analysis)
 - [4. Worked example](#4-worked-example)
-  - [4.1 Plot results](#41-plot-results)
-  - [4.2 Example figures](#42-example-figures)
+  - [4.1 Example figures](#41-example-figures)
 
 ## 1. Introduction
 
@@ -43,7 +42,7 @@ Use Linux for the complete workflow, which invokes command-line tools and uses m
 
 ### Install dependencies and APPLE
 
-Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. Bioconductor repositories are needed for the genomic analysis dependencies.
+Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. These include DESeq2 for differential PAC abundance, DEXSeq for differential APA usage, and BiocParallel for multicore analysis. Bioconductor repositories are needed so that these dependencies are installed automatically with APPLE.
 
 ```
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
@@ -53,12 +52,17 @@ if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes")
 }
 options(repos = BiocManager::repositories())
-remotes::install_github("wangziiiiiii/APPLE.R")
+remotes::install_github(
+  "wangziiiiiii/APPLE.R",
+  dependencies = NA,
+  upgrade = "never"
+)
 library(APPLE)
 ```
 
 While the repository is private, installation requires GitHub authentication with access to the APPLE repository. Loading APPLE does not install packages or attach dependency packages to the search path.
 
+**API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
 ## 3. Workflow
 
@@ -389,31 +393,25 @@ results <- DESeq2.PolyA(QpolyA, colData)
 | `PCA.Plot` | PCA plot from factoextra::fviz_pca_ind(), colored by condition. |
 | `UMAP.Plot` | UMAP plot based on uwot::umap(), colored by condition. |
 
-### 3.6 Gene-level APA analysis
+### 3.6 Differential APA analysis
 
-Quantify.GeneAPA() compares the distribution of PAC counts within each gene. It excludes intergenic PACs and retains genes with at least two remaining PACs. The contrast order is **column, control, treatment**.
+DEAPA() runs the complete differential alternative polyadenylation workflow. It combines the APA metrics from Quantify.GeneAPA(), relative poly(A) position changes, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU. Intergenic PACs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PACs are tested. One control can be compared with one or more treatment conditions in the same call.
 
-```
-apa_results <- Quantify.GeneAPA(
-  QpolyA,
+```r
+deapa <- DEAPA(
+  QpolyA = QpolyA,
   colData = sample_metadata,
-  contrast = c("condition", "Control", "Treatment")
+  control = "Control",
+  treatment = c("Treatment1", "Treatment2"),
+  workers = 10
 )
 
-gene_RPP <- compute_gene_RPP(
-  polyA = QpolyA@polyA,
-  sample_names = rownames(sample_metadata)
-)
+DEAPA_gene <- deapa$DEAPA_gene
+DEAPA_PAS <- deapa$DEAPA_PAS
 
-delta_RPP <- compute_delta_RPP(
-  polyA_rank = gene_RPP,
-  colData = sample_metadata,
-  control_cond = "Control",
-  treat_cond = "Treatment"
-)
-
-apa_results <- dplyr::left_join(apa_results, delta_RPP, by = "gene_id")
-
+Plot.DEAPAVolcano(DEAPA_gene)
+Plot.DEAPACounts(DEAPA_gene, level = "gene")
+Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 ```
 
 #### Arguments
@@ -422,27 +420,19 @@ apa_results <- dplyr::left_join(apa_results, delta_RPP, by = "gene_id")
 | --- | --- |
 | `QpolyA` | A QuantifyPolyA object containing annotated PACs. |
 | `colData` | Sample metadata; row names must match sample count columns. Must contain a condition column. |
-| `contrast` | c(column, control_group, treatment_group). |
-| `polyA` | PAC data frame, typically QpolyA@polyA. |
-| `sample_names` | Names of the sample count columns in polyA. |
-| `type_col` | PAC annotation column, default "type". |
-| `gene_id_col` | Gene identifier column, default "gene_id". |
-| `strand_col` | Strand column, default "strand". |
-| `center_col` | PAC center coordinate column, default "center". |
-| `polyA_rank` | Gene-level RPP table returned by compute_gene_RPP(). |
-| `control_cond` | Control condition name in colData$condition. |
-| `treat_cond` | Treatment condition name in colData$condition. |
+| `control` | Name of the control condition in colData$condition. |
+| `treatment` | One or more treatment condition names. With NULL, every non-control condition is analyzed. |
+| `workers` | Number of processes used by BiocParallel::MulticoreParam(). |
 
 #### Output
 
 | Output | Description |
 | --- | --- |
-| `Quantify.GeneAPA()` | One row per gene: gene_id, pd, r, p.value. |
-| `compute_gene_RPP()` | One row per gene: gene_id and one RPP column per sample. |
-| `compute_delta_RPP()` | One row per gene: gene_id, delta_RPP. |
-| Joined result | gene_id, pd, r, p.value, delta_RPP. |
+| `DEAPA_gene` | Gene-level table containing gene_id, pd, r, p.value, DEXSeq qvalue, delta_RPP, and contrast. |
+| `DEAPA_PAS` | PAS-level table containing featureID, gene_id, exonBaseMean, dispersion, stat, pvalue, padj, delta_PSU, and contrast. |
+| `DEXSeq.Result` | Named list containing the fitted DEXSeq object for every treatment-versus-control comparison. |
 
-compute_gene_RPP() excludes intergenic PACs and genes with fewer than two retained PACs.
+Quantify.GeneAPA(), compute_gene_RPP(), and compute_delta_RPP() remain available for users who need the individual intermediate calculations. DEAPA() calls and combines them automatically.
 
 #### Poly(A) site usage (PSU)
 
@@ -646,136 +636,26 @@ tail_pca <- Tail.PCA(
 head(tail_pca$pca$x)
 ```
 
-#### Quantify gene-level APA shifts
+#### Quantify differential APA
 
 ```r
-gene_RPP <- compute_gene_RPP(
-  polyA = QpolyA@polyA,
-  sample_names = sample_names
+deapa <- DEAPA(
+  QpolyA = QpolyA,
+  colData = colData,
+  control = "NC",
+  treatment = c("EX1", "EX2"),
+  workers = 10
 )
 
-apa_results <- lapply(c("EX1", "EX2"), function(treatment) {
-  apa <- Quantify.GeneAPA(
-    QpolyA,
-    colData,
-    contrast = c("condition", "NC", treatment)
-  )
+DEAPA_gene <- deapa$DEAPA_gene
+DEAPA_PAS <- deapa$DEAPA_PAS
 
-  delta <- compute_delta_RPP(
-    polyA_rank = gene_RPP,
-    colData = colData,
-    control_cond = "NC",
-    treat_cond = treatment
-  )
-
-  result <- dplyr::left_join(apa, delta, by = "gene_id")
-  result$contrast <- paste(treatment, "v.s. NC")
-  result
-})
-
-DEAPA_gene <- dplyr::bind_rows(apa_results)
+Plot.DEAPAVolcano(DEAPA_gene)
+Plot.DEAPACounts(DEAPA_gene, level = "gene")
+Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 ```
 
-### 4.1 Plot results
-
-The plotting functions return `ggplot` objects. Printing an object displays it, and `ggplot2::ggsave()` can save it to a file. The default colors, thresholds, labels, and themes reproduce the supplied analysis scripts.
-
-#### Tail-length plots
-
-```r
-# PCA and density plots use the Tail.PCA() result.
-p_tail_pca <- Plot.TailPCA(tail_pca)
-p_tail_density <- Plot.TailDensity(tail_pca)
-
-# Volcano plots use one Tail.DiffPair() result at a time.
-p_tail_ex1 <- Plot.TailVolcano(
-  tail_results[["EX1"]],
-  title = "EX1 vs NC"
-)
-p_tail_ex2 <- Plot.TailVolcano(
-  tail_results[["EX2"]],
-  title = "EX2 vs NC"
-)
-
-print(p_tail_pca)
-print(p_tail_density)
-print(p_tail_ex1)
-print(p_tail_ex2)
-```
-
-The defaults classify a PAC as lengthening or shortening when `q_value < 0.05` and the absolute mean difference is greater than 15 nt. These values can be changed with `q_cutoff` and `mean_diff_cutoff`.
-
-#### PAS-expression plots
-
-```r
-pac_results <- DESeq2.PolyA(QpolyA, colData)
-
-# PCA accepts the complete DESeq2.PolyA() result.
-p_pas_pca <- Plot.PASPCA(pac_results)
-
-# Build one DESeq2 result table for each treatment-control comparison.
-pas_results <- lapply(c("EX1", "EX2"), function(treatment) {
-  as.data.frame(
-    DESeq2::lfcShrink(
-      pac_results$DESeq2.Result,
-      contrast = c("condition", treatment, "NC"),
-      type = "normal"
-    )
-  )
-})
-names(pas_results) <- c("EX1", "EX2")
-
-p_pas_ex1 <- Plot.PASVolcano(
-  pas_results[["EX1"]],
-  treatment_group = "EX1"
-)
-p_pas_ex2 <- Plot.PASVolcano(
-  pas_results[["EX2"]],
-  treatment_group = "EX2"
-)
-
-print(p_pas_pca)
-print(p_pas_ex1)
-print(p_pas_ex2)
-```
-
-#### Differential APA plots
-
-The DEAPA volcano and summary bars use the DEXSeq-enhanced tables from the differential APA workflow. `DEAPA_gene` must contain `pd`, `r`, `qvalue`, and `contrast`. The optional PAS-level bar chart uses `DEAPA_PAS` with `delta_PSU`, `padj`, and `contrast`.
-
-```r
-p_deapa_volcano <- Plot.DEAPAVolcano(DEAPA_gene)
-
-# Overall numbers of distal and proximal genes.
-p_deapa_gene_counts <- Plot.DEAPACounts(
-  DEAPA_gene,
-  level = "gene"
-)
-
-# Overall numbers of up- and downregulated PASs.
-p_deapa_pas_counts <- Plot.DEAPACounts(
-  DEAPA_PAS,
-  level = "PAS"
-)
-
-print(p_deapa_volcano)
-print(p_deapa_gene_counts)
-print(p_deapa_pas_counts)
-```
-
-For example, save any returned plot at publication resolution:
-
-```r
-ggplot2::ggsave(
-  "tail-pca.png",
-  p_tail_pca,
-  width = 7,
-  height = 6,
-  dpi = 300
-)
-```
-
-### 4.2 Example figures
+### 4.1 Example figures
 
 <table>
 <tr>

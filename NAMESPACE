@@ -2,6 +2,7 @@
 
 export(Annotate.PolyA)
 export(Cluster.PolyA)
+export(DEAPA)
 export(DESeq2.PolyA)
 export(Extract_polyAsite)
 export(FU)
@@ -142,3 +143,4 @@ importFrom(utils,head)
 importFrom(utils,read.table)
 importFrom(utils,write.table)
 importFrom(uwot,umap)
+
