@@ -38,7 +38,9 @@ These analyses address different questions: changes in tail length, changes in s
 
 ## 2. Installation
 
-Use Linux for the complete workflow, which invokes command-line tools and uses multicore processing. Install external tools separately and make sure they are available on your PATH.
+> **Platform compatibility:** APPLE is recommended for Linux or macOS. Some command-line tools and multicore functions may not be fully compatible with Windows, so parts of the workflow may fail or require manual adjustment on Windows.
+
+The complete workflow invokes command-line tools and uses multicore processing. Install external tools separately and make sure they are available on your PATH.
 
 ### Install dependencies and APPLE
 
