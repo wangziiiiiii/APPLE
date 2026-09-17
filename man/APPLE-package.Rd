@@ -15,11 +15,12 @@ cluster and annotate sites, and compare tail lengths and APA usage.
 \code{\link[=Map.Tail]{Map.Tail()}}, \code{\link[=Tail.PCA]{Tail.PCA()}}, \code{\link[=Tail.DiffPair]{Tail.DiffPair()}}, \code{\link[=Quantify.GeneAPA]{Quantify.GeneAPA()}}
 }
 \author{
-\strong{Maintainer}: Jane Doe \email{jane@example.com}
+\strong{Maintainer}: Zi Wang \email{1060823759@qq.com}
 
 Authors:
 \itemize{
-  \item Jane Doe \email{jane@example.com}
+  \item Zi Wang \email{1060823759@qq.com} (College of the Environment and Ecology, Xiamen University)
 }
 
 }
+

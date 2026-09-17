@@ -4,6 +4,9 @@
 
 *Analysis of poly(A) tail lengths and alternative polyadenylation in R.*
 
+**Author:** Zi Wang  
+**Affiliation:** College of the Environment and Ecology, Xiamen University
+
 APPLE connects read processing, poly(A) site clustering, genomic annotation, tail-length comparisons, and gene-level APA analysis in one workflow.
 
 | Analysis | Main outputs |
@@ -22,7 +25,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
   - [3.3 PAC identification and annotation](#33-pac-identification-and-annotation)
   - [3.4 Tail-length analysis](#34-tail-length-analysis)
   - [3.5 Differential PAC counts](#35-differential-pac-counts)
-  - [3.6 Gene-level APA analysis](#36-gene-level-apa-analysis)
+  - [3.6 Differential APA analysis](#36-differential-apa-analysis)
 - [4. Worked example](#4-worked-example)
   - [4.1 Example figures](#41-example-figures)
 

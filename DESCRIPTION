@@ -4,9 +4,13 @@ Title: Analysis Pipeline for PolyA-length and PolyA-site
 Version: 1.0.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
+      given = "Zi",
+      family = "Wang",
+      email = "1060823759@qq.com",
+      role = c("aut", "cre"),
+      comment = c(
+        affiliation = "College of the Environment and Ecology, Xiamen University"
+      )
     )
   )
 Description: A comprehensive R package for analyzing polyA-seq data,
