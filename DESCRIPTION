@@ -7,10 +7,7 @@ Authors@R: c(
       given = "Zi",
       family = "Wang",
       email = "wangzi0406@qq.com",
-      role = c("aut", "cre"),
-      comment = c(
-        affiliation = "College of the Environment and Ecology, Xiamen University"
-      )
+      role = c("aut", "cre")
     )
   )
 Description: A comprehensive R package for analyzing polyA-seq data,

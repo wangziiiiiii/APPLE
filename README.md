@@ -5,7 +5,6 @@
 *Analysis of poly(A) tail lengths and alternative polyadenylation in R.*
 
 **Author:** Zi Wang  
-**Affiliation:** College of the Environment and Ecology, Xiamen University
 
 APPLE connects read processing, poly(A) site clustering, genomic annotation, tail-length comparisons, and gene-level APA analysis in one workflow.
 

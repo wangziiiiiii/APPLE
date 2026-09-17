@@ -19,7 +19,7 @@ cluster and annotate sites, and compare tail lengths and APA usage.
 
 Authors:
 \itemize{
-  \item Zi Wang \email{wangzi0406@qq.com} (College of the Environment and Ecology, Xiamen University)
+  \item Zi Wang \email{wangzi0406@qq.com}
 }
 
 }
