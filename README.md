@@ -36,12 +36,6 @@ We developed APPLE (**A**lternative **P**olyadenylation and **P**oly(A) **L**eng
 
 **Terminology:** throughout this README, a **poly(A) site (PAS)** means the cluster formed by grouping nearby read-level cleavage sites with `Cluster.PolyA()`. Each PAS is represented internally by a `cluster_id`. The word PAS below therefore refers to a clustered analysis unit rather than a single read-level cleavage coordinate.
 
-### Why APPLE?
-
-**APPLE** stands for **A**lternative **P**olyadenylation [APA] and **P**oly(A) **L**ength **E**stimation. The name captures the two central dimensions of the software: where transcripts are polyadenylated and how long their poly(A) tails are.
-
-These analyses address different questions: changes in tail length, changes in site abundance, and redistribution among sites within the same gene. Input reads and tail-length annotations must be prepared for the extraction workflow described below.
-
 ## 2. Installation
 
 > **Platform compatibility:** APPLE is recommended for Linux or macOS. Some command-line tools and multicore functions may not be fully compatible with Windows, so parts of the workflow may fail or require manual adjustment on Windows.
@@ -69,8 +63,6 @@ library(APPLE)
 ```
 
 While the repository is private, installation requires GitHub authentication with access to the APPLE repository. Loading APPLE does not install packages or attach dependency packages to the search path.
-
-**API migration:** the latest source uses Map.Tail(), Tail.PCA(), and Tail.DiffPair(). These replace mapTail(), tail_pca(), and polyAlength(), respectively. Tail.DiffPair() accepts one treatment and one method per call; Tail.PCA() has new arguments and returns a list. Update existing scripts rather than substituting function names alone.
 
 ## 3. Workflow
 
