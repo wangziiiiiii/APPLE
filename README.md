@@ -32,7 +32,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 
 ## 1. Introduction
 
-APPLE analyzes poly(A) site usage and tail-length measurements from sequencing data. It groups nearby read-level cleavage sites into clusters, annotates their genomic context, and builds sample-level site count data. Downstream functions compare individual mRNA tail lengths, analyze site abundance, and summarize shifts in within-gene site usage.
+We developed APPLE (**A**lternative **P**olyadenylation and **P**oly(A) **L**ength **E**stimation), a pipeline designed to estimate poly(A) tail length at the APA isoform level. Building on our previously published QuantifyPoly(A) pipeline for Illumina 3′-seq data, APPLE adds the ability to estimate poly(A) tail length for each APA isoform.
 
 **Terminology:** throughout this README, a **poly(A) site (PAS)** means the cluster formed by grouping nearby read-level cleavage sites with `Cluster.PolyA()`. Each PAS is represented internally by a `cluster_id`. The word PAS below therefore refers to a clustered analysis unit rather than a single read-level cleavage coordinate.
 
