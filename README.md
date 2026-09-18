@@ -11,9 +11,9 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 
 | Analysis | Main outputs |
 | --- | --- |
-| Poly(A) sites | Annotated poly(A) site clusters (PACs) and sample counts |
-| Poly(A) tails | PAC-level tail-length summaries, statistical comparisons, and PCA |
-| APA dynamics | Changes in PAC usage, relative poly(A) position, and directional shifts |
+| Poly(A) sites | Annotated PASs and sample counts |
+| Poly(A) tails | PAS-level tail-length summaries, statistical comparisons, and PCA |
+| APA dynamics | Changes in PAS usage, relative poly(A) position, and directional shifts |
 
 **Contents**
 
@@ -22,9 +22,9 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 - [3. Workflow](#3-workflow)
   - [3.1 Read alignment](#31-read-alignment)
   - [3.2 Site and tail extraction](#32-site-and-tail-extraction)
-  - [3.3 PAC identification and annotation](#33-pac-identification-and-annotation)
+  - [3.3 PAS identification and annotation](#33-pas-identification-and-annotation)
   - [3.4 Tail-length analysis](#34-tail-length-analysis)
-  - [3.5 Differential PAC counts](#35-differential-pac-counts)
+  - [3.5 Differential PAS counts](#35-differential-pas-counts)
   - [3.6 Differential APA analysis](#36-differential-apa-analysis)
 - [4. Worked example](#4-worked-example)
   - [4.1 Example figures](#41-example-figures)
@@ -32,7 +32,9 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 
 ## 1. Introduction
 
-APPLE analyzes poly(A) site usage and tail-length measurements from sequencing data. It groups nearby sites into poly(A) site clusters (PACs), annotates their genomic context, and builds sample-level PAC count data. Downstream functions compare individual mRNA tail lengths, analyze PAC abundance, and summarize shifts in within-gene PAC usage.
+APPLE analyzes poly(A) site usage and tail-length measurements from sequencing data. It groups nearby read-level cleavage sites into clusters, annotates their genomic context, and builds sample-level site count data. Downstream functions compare individual mRNA tail lengths, analyze site abundance, and summarize shifts in within-gene site usage.
+
+**Terminology:** throughout this README, a **poly(A) site (PAS)** means the cluster formed by grouping nearby read-level cleavage sites with `Cluster.PolyA()`. Each PAS is represented internally by a `cluster_id`. The word PAS below therefore refers to a clustered analysis unit rather than a single read-level cleavage coordinate.
 
 ### Why APPLE?
 
@@ -48,7 +50,7 @@ The complete workflow invokes command-line tools and uses multicore processing. 
 
 ### Install dependencies and APPLE
 
-Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. These include DESeq2 for differential PAC abundance, DEXSeq for differential APA usage, and BiocParallel for multicore analysis. Bioconductor repositories are needed so that these dependencies are installed automatically with APPLE.
+Install samtools, bedtools, and minimap2 separately for the full alignment and extraction workflow. The package declares its R dependencies in DESCRIPTION. These include DESeq2 for differential PAS abundance, DEXSeq for differential APA usage, and BiocParallel for multicore analysis. Bioconductor repositories are needed so that these dependencies are installed automatically with APPLE.
 
 ```
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
@@ -72,7 +74,7 @@ While the repository is private, installation requires GitHub authentication wit
 
 ## 3. Workflow
 
-Follow steps 3.1–3.3 to prepare annotated PACs, then use tail-length analysis, differential PAC count analysis, or gene-level APA analysis as appropriate for your question.
+Follow steps 3.1–3.3 to prepare annotated PASs, then use tail-length analysis, differential PAS count analysis, or gene-level APA analysis as appropriate for your question.
 
 [![APPLE workflow: sequencing and preprocessing, read alignment, software modules, and main outputs](docs/images/apple-workflow.jpg)](docs/images/apple-workflow.jpg)
 
@@ -132,9 +134,9 @@ results <- Extract_polyAsite(work_dir = "/path/to/sam/",
 | `bedtools_path` | Path to bedtools executable, default is "bedtools" |
 | `remove_temp_files` | Whether to remove temporary files, default is FALSE |
 
-### 3.3 PAC identification and annotation
+### 3.3 PAS identification and annotation
 
-Load site data, define PACs, assign genomic features, filter low-count clusters, and map tail lengths to the retained clusters.
+Load site data, define PASs, assign genomic features, filter low-count sites, and map tail lengths to the retained sites.
 
 #### 3.3.1 Load raw polyA data
 
@@ -191,7 +193,7 @@ QpolyA <- Remove.IP(
 
 #### 3.3.2 Weighted density peak clustering
 
-Cluster.PolyA() applies a weighted density peak clustering algorithm to group adjacent poly(A) sites into Poly(A) Clusters (PACs). The parameter max.gapwidth controls the maximum allowed gap between sites within a cluster. Clusters wider than max.gapwidth are further refined by a second clustering step.
+Cluster.PolyA() applies a weighted density peak clustering algorithm to group adjacent read-level poly(A) cleavage sites. Each resulting cluster is treated as a PAS. The parameter max.gapwidth controls the maximum allowed gap between sites within a cluster. Clusters wider than max.gapwidth are further refined by a second clustering step.
 
 #### Usage
 
@@ -204,18 +206,18 @@ QpolyA <- Cluster.PolyA(QpolyA, max.gapwidth = 24, mc.cores = 4)
 | Parameter | Description |
 | --- | --- |
 | `QpolyA` | A QuantifyPolyA object containing clean poly(A) sites. |
-| `max.gapwidth` | Maximum distance between two adjacent sites in a PAC, default 24. |
+| `max.gapwidth` | Maximum distance between two adjacent cleavage sites in a PAS, default 24. |
 | `mc.cores` | Number of cores for parallel clustering, default 4. |
 
 #### Output
 
 | Output | Description |
 | --- | --- |
-| Returned object | An updated QuantifyPolyA object with PAC information stored in @polyA. Clusters that were split are recorded in @split.clusters. |
+| Returned object | An updated QuantifyPolyA object with PAS information stored in @polyA. Clusters that were split are recorded in @split.clusters. |
 
 #### 3.3.3 Feature annotation and APA quantification
 
-Annotate.PolyA() uses a genome annotation file (GTF/GFF) to assign each PAC to a gene and classify its location (e.g., 3’UTR, intron, intergenic). This is essential for downstream biological interpretation.
+Annotate.PolyA() uses a genome annotation file (GTF/GFF) to assign each PAS to a gene and classify its location (e.g., 3’UTR, intron, intergenic). This is essential for downstream biological interpretation.
 
 #### Usage
 
@@ -227,7 +229,7 @@ QpolyA <- Annotate.PolyA(QpolyA, gff = "/path/to/annotation.gtf")
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object with PACs. |
+| `QpolyA` | A QuantifyPolyA object with PASs. |
 | `gff` | A genome annotation file in GFF or GTF format (GTF recommended). |
 
 #### Output
@@ -236,9 +238,9 @@ QpolyA <- Annotate.PolyA(QpolyA, gff = "/path/to/annotation.gtf")
 | --- | --- |
 | Returned object | An updated QuantifyPolyA object where the @polyA data frame includes additional columns: gene_id, distance, and type. |
 
-#### 3.3.4 Filter low-confidence PolyA Clusters
+#### 3.3.4 Filter low-confidence PASs
 
-Remove PACs with low read counts across samples using Filter.PolyA(). Only PACs with at least min_count reads in at least min_sample samples are retained.
+Remove PASs with low read counts across samples using Filter.PolyA(). Only PASs with at least min_count reads in at least min_sample samples are retained.
 
 #### Usage
 
@@ -250,19 +252,19 @@ QpolyA <- Filter.PolyA(QpolyA, min_count = 10, min_sample = 1)
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object with annotated PACs. |
-| `min_count` | Minimum read count in a PAC, default 10. |
+| `QpolyA` | A QuantifyPolyA object with annotated PASs. |
+| `min_count` | Minimum read count in a PAS, default 10. |
 | `min_sample` | Minimum number of samples with `min_count` reads, default 1. |
 
 #### Output
 
 | Output | Description |
 | --- | --- |
-| Returned object | A filtered QuantifyPolyA object. PACs not meeting criteria are removed from @polyA. |
+| Returned object | A filtered QuantifyPolyA object. PASs not meeting criteria are removed from @polyA. |
 
-#### 3.3.5 Map tail lengths to PolyA Clusters
+#### 3.3.5 Map tail lengths to PASs
 
-After filtering, map individual tail lengths to their PACs. Map.Tail() performs this mapping, creating a sample‑wise table linking PAC IDs to concatenated tail lengths.
+After filtering, map individual tail lengths to their PASs. Map.Tail() performs this mapping, creating a sample-wise table linking PAS IDs to concatenated tail lengths.
 
 #### Usage
 
@@ -274,7 +276,7 @@ QpolyA <- Map.Tail(QpolyA, delimiter = ";")
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object with PACs defined. |
+| `QpolyA` | A QuantifyPolyA object with PASs defined. |
 | `delimiter` | Delimiter used to separate tail lengths in the output, default ";". |
 
 #### Output
@@ -289,7 +291,7 @@ QpolyA <- Map.Tail(QpolyA, delimiter = ";")
 
 Tail.DiffPair() compares one treatment with one control at a time using a single selected test: t-test, Wilcoxon rank-sum test, or a linear mixed model (LMM). The t-test and Wilcoxon test pool individual mRNA observations within each condition. The LMM includes a random intercept for lib_id when multiple libraries are available; otherwise it uses a linear model.
 
-Descriptive statistics use raw tail lengths. With logscale = TRUE, statistical tests use log2-transformed lengths. BH correction is applied across retained PACs within each function call.
+Descriptive statistics use raw tail lengths. With logscale = TRUE, statistical tests use log2-transformed lengths. BH correction is applied across retained PASs within each function call.
 
 #### Usage
 
@@ -316,24 +318,24 @@ results <- Tail.DiffPair(
 | `treatment_group` | Treatment condition name. |
 | `test_method` | One of "t_test", "wilcoxon", or "lmm"; default "t_test". |
 | `logscale` | Apply log2 transformation for testing; default TRUE. |
-| `min_mRNA_per_condition` | Minimum number of positive mRNA tail lengths per group and PAC; default 10. |
+| `min_mRNA_per_condition` | Minimum number of positive mRNA tail lengths per group and PAS; default 10. |
 | `mc.cores` | Number of processing cores; default 4. |
 
 #### Output
 
 | Output | Description |
 | --- | --- |
-| Result data frame | One row per retained PAC, identified by cluster_id. |
+| Result data frame | One row per retained PAS, identified by cluster_id. |
 | Descriptive statistics | n_control, n_treatment, means, medians, and standard deviations on the raw scale. |
 | Raw effect measures | fold_change is treatment mean / control mean; mean_diff and median_diff are treatment minus control. |
 | `log2_fc` | On log2-transformed data: mean difference for t-test, median difference for Wilcoxon, and condition coefficient for LMM. On raw data: log2 of the raw mean ratio. |
 | Test-specific fields | statistic and cohens_d (t-test); statistic and effect_size_r (Wilcoxon); estimate, std_error, and t_value (LMM). |
-| `p_value`, `q_value` | Test P value and BH-adjusted P value across PACs in this call. |
+| `p_value`, `q_value` | Test P value and BH-adjusted P value across PASs in this call. |
 | `method` | Selected test and transformation scale. |
 
 #### 3.4.2 Principal component analysis of tail lengths
 
-Tail.PCA() summarizes tail lengths per PAC and sample, removes low-count or incomplete PACs, drops constant PACs, and runs centered, scaled PCA. It returns a list containing the matrix, metadata, and PCA object; it does not impute missing values.
+Tail.PCA() summarizes tail lengths per PAS and sample, removes low-count or incomplete PASs, drops constant PASs, and runs centered, scaled PCA. It returns a list containing the matrix, metadata, and PCA object; it does not impute missing values.
 
 #### Usage
 
@@ -354,8 +356,8 @@ pca_results <- Tail.PCA(
 | --- | --- |
 | `QpolyA` | A QuantifyPolyA object processed with Map.Tail(). |
 | `sample_info` | Metadata containing sample and condition, optionally lib_id. |
-| `summary_stat` | Per-PAC summary: "mean" (default) or "median". |
-| `min_count_per_sample` | Minimum positive tail observations per PAC and sample; default 10. |
+| `summary_stat` | Per-PAS summary: "mean" (default) or "median". |
+| `min_count_per_sample` | Minimum positive tail observations per PAS and sample; default 10. |
 | `cores` | Number of processing cores; default 4. |
 | `show_progress` | Show progress during sample processing; default TRUE. |
 
@@ -363,15 +365,15 @@ pca_results <- Tail.PCA(
 
 | Element | Description |
 | --- | --- |
-| `matrix` | Retained tail-length summary matrix, with PACs in rows and samples in columns. |
+| `matrix` | Retained tail-length summary matrix, with PASs in rows and samples in columns. |
 | `sample_info` | Metadata for samples represented in the PCA. |
 | `pca` | A prcomp object; sample coordinates are in pca$x. |
 | `filtered_data` | Long table after the per-sample count filter. |
-| `removed_clusters` | IDs of incomplete PACs removed before the zero-variance filter. |
+| `removed_clusters` | IDs of incomplete PASs removed before the zero-variance filter. |
 
-### 3.5 Differential PAC counts
+### 3.5 Differential PAS counts
 
-DESeq2.PolyA() fits a DESeq2 model to PAC counts using design ~ condition. It also applies a variance-stabilizing transformation and generates PCA and UMAP plots. This analysis measures changes in PAC abundance; it does not directly model each PAC's proportion within its gene. Use section 3.6 to examine within-gene APA usage.
+DESeq2.PolyA() fits a DESeq2 model to PAS counts using design ~ condition. It also applies a variance-stabilizing transformation and generates PCA and UMAP plots. This analysis measures changes in PAS abundance; it does not directly model each PAS's proportion within its gene. Use section 3.6 to examine within-gene APA usage.
 
 #### Usage
 
@@ -388,7 +390,7 @@ results <- DESeq2.PolyA(QpolyA, colData)
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object containing PAC counts in the `@polyA` slot. PACs must have been filtered and annotated. |
+| `QpolyA` | A QuantifyPolyA object containing PAS counts in the `@polyA` slot. PASs must have been filtered and annotated. |
 | `colData` | A data.frame with sample metadata. Row names must match the sample names in `QpolyA@sample_names`, and must include a column named `condition` specifying the experimental groups. |
 
 #### Output
@@ -401,7 +403,7 @@ results <- DESeq2.PolyA(QpolyA, colData)
 
 ### 3.6 Differential APA analysis
 
-DEAPA() runs the complete differential alternative polyadenylation workflow. It combines the APA metrics from Quantify.GeneAPA(), relative poly(A) position changes, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU. Intergenic PACs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PACs are tested. One control can be compared with one or more treatment conditions in the same call.
+DEAPA() runs the complete differential alternative polyadenylation workflow. It combines the APA metrics from Quantify.GeneAPA(), relative poly(A) position changes, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU. Intergenic PASs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PASs are tested. One control can be compared with one or more treatment conditions in the same call.
 
 ```r
 deapa <- DEAPA(
@@ -424,7 +426,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 
 | Parameter | Description |
 | --- | --- |
-| `QpolyA` | A QuantifyPolyA object containing annotated PACs. |
+| `QpolyA` | A QuantifyPolyA object containing annotated PASs. |
 | `colData` | Sample metadata; row names must match sample count columns. Must contain a condition column. |
 | `control` | Name of the control condition in colData$condition. |
 | `treatment` | One or more treatment condition names. With NULL, every non-control condition is analyzed. |
@@ -444,7 +446,7 @@ DEAPA() calls and combines three existing APPLE functions. They remain available
 
 | Function | Purpose | Main output |
 | --- | --- | --- |
-| `Quantify.GeneAPA()` | Measures how strongly the within-gene PAC usage distribution changes between two conditions. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
+| `Quantify.GeneAPA()` | Measures how strongly the within-gene PAS usage distribution changes between two conditions. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
 | `compute_gene_RPP()` | Calculates the relative polyadenylation position for every gene in every sample. | One row per gene with `gene_id` and one RPP column per sample. |
 | `compute_delta_RPP()` | Subtracts the control-group mean RPP from the treatment-group mean RPP. | One row per gene with `gene_id` and `delta_RPP`. |
 
@@ -492,18 +494,18 @@ These separate calls do not calculate the DEXSeq gene-level `qvalue`, PAS-level 
 
 #### Poly(A) site usage (PSU)
 
-For gene $g$, PAC $k$, and sample $s$, define usage as:
+For gene $g$, PAS $k$, and sample $s$, define usage as:
 
 ```math
 P_{g,s,k} = \mathrm{PSU}_{g,s,k}
 = \frac{n_{g,s,k}}{\sum_{\ell=1}^{K_g} n_{g,s,\ell}}
 ```
 
-Here, $n$ is the PAC read count and $K_g$ is the number of retained PACs in the gene. With a positive gene total, usage proportions sum to 1 within each sample.
+Here, $n$ is the PAS read count and $K_g$ is the number of retained PASs in the gene. With a positive gene total, usage proportions sum to 1 within each sample.
 
 #### Proportion difference (PD)
 
-PD measures the magnitude of the change in PAC usage. For each control–treatment replicate pair, the code sums absolute usage differences across PACs and divides by two. It then averages over all cross-condition replicate pairs:
+PD measures the magnitude of the change in PAS usage. For each control-treatment replicate pair, the code sums absolute usage differences across PASs and divides by two. It then averages over all cross-condition replicate pairs:
 
 ```math
 \mathrm{PD}_g =
@@ -513,11 +515,11 @@ PD measures the magnitude of the change in PAC usage. For each control–treatme
 \left|P_{g,C_i,k}-P_{g,T_j,k}\right|
 ```
 
-$c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAC.
+$c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAS.
 
 #### RPP
 
-Relative poly(A) position (RPP) summarizes proximal versus distal PAC usage. PACs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
+Relative poly(A) position (RPP) summarizes proximal versus distal PAS usage. PASs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
 
 ```math
 w_{g,k}=\frac{k-1}{K_g-1},
@@ -539,17 +541,17 @@ The change in relative poly(A) position is reported as delta_RPP. compute_delta_
 
 | Result | Interpretation |
 | --- | --- |
-| delta_RPP > 0 | Shift toward distal PACs in treatment |
-| delta_RPP < 0 | Shift toward proximal PACs in treatment |
+| delta_RPP > 0 | Shift toward distal PASs in treatment |
+| delta_RPP < 0 | Shift toward proximal PASs in treatment |
 | delta_RPP = 0 | No net change in the mean rank-weighted position; usage can still change |
 
-The default analysis includes genic PACs outside the 3′UTR. Interpret a shift as **3′UTR lengthening or shortening only when the selected PAC set and annotation support that interpretation**. The difference retains its sign; it is not an absolute difference.
+The default analysis includes genic PASs outside the 3′UTR. Interpret a shift as **3′UTR lengthening or shortening only when the selected PAS set and annotation support that interpretation**. The difference retains its sign; it is not an absolute difference.
 
 #### Correlation score and P values
 
-The r column is a count-weighted correlation between condition identity (control = 1, treatment = 2) and PAC center coordinate, corrected for strand and averaged across replicate pairs. Positive values indicate a distal shift in treatment; negative values indicate a proximal shift. Unlike RPP, this score uses genomic coordinates rather than position ranks.
+The r column is a count-weighted correlation between condition identity (control = 1, treatment = 2) and PAS center coordinate, corrected for strand and averaged across replicate pairs. Positive values indicate a distal shift in treatment; negative values indicate a proximal shift. Unlike RPP, this score uses genomic coordinates rather than position ranks.
 
-For each replicate pair, dynamicsDetect() runs a chi-squared test on a PAC-by-condition count table after removing rows with zero combined counts. If only one row remains, it assigns P = 1. The returned p.value is the **arithmetic mean of these pairwise P values**. It is not a P value from a joint generalized linear model, a formal combined P value, or an FDR-adjusted value.
+For each replicate pair, dynamicsDetect() runs a chi-squared test on a PAS-by-condition count table after removing rows with zero combined counts. If only one row remains, it assigns P = 1. The returned p.value is the **arithmetic mean of these pairwise P values**. It is not a P value from a joint generalized linear model, a formal combined P value, or an FDR-adjusted value.
 
 The example screening rule **pd > 0.1 and p.value < 0.05** can be applied explicitly by the user. It is not applied automatically by the function and should not be treated as a universal significance criterion.
 
@@ -677,7 +679,7 @@ names(tail_results) <- c("EX1", "EX2")
 
 #### Explore tail-length variation
 
-The example uses the median tail length of each retained PAC in each sample.
+The example uses the median tail length of each retained PAS in each sample.
 
 ```r
 tail_pca <- Tail.PCA(
@@ -725,7 +727,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 </table>
 
 
-With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for EX1 versus NC, and 15 distal and 2 proximal genes for EX2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PACs for EX1, and 5 lengthening and 3 shortening PACs for EX2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for EX1 versus NC, and 15 distal and 2 proximal genes for EX2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PASs for EX1, and 5 lengthening and 3 shortening PASs for EX2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
 
 ## 5. License
 
