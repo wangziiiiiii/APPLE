@@ -32,7 +32,7 @@ APPLE connects read processing, poly(A) site clustering, genomic annotation, tai
 
 ## 1. Introduction
 
-We developed APPLE (**A**lternative **P**olyadenylation and **P**oly(A) **L**ength **E**stimation), a pipeline designed to estimate poly(A) tail length at the APA isoform level. Building on our previously published QuantifyPoly(A) pipeline for Illumina 3′-seq data, APPLE adds the ability to estimate poly(A) tail length for each APA isoform.
+We developed APPLE (**A**lternative **P**olyadenylation and **P**oly(A) **L**ength **E**stimation), a pipeline designed to estimate poly(A) tail length at the APA isoform level from Nanopore Tail-Iso-Seq data. Building on our previously published QuantifyPoly(A) pipeline for Illumina 3′-seq data, APPLE adds the ability to estimate poly(A) tail length for each APA isoform.
 
 **Terminology:** throughout this README, a **poly(A) site (PAS)** means the cluster formed by grouping nearby read-level cleavage sites with `Cluster.PolyA()`. Each PAS is represented internally by a `cluster_id`. The word PAS below therefore refers to a clustered analysis unit rather than a single read-level cleavage coordinate.
 
@@ -65,6 +65,8 @@ library(APPLE)
 While the repository is private, installation requires GitHub authentication with access to the APPLE repository. Loading APPLE does not install packages or attach dependency packages to the search path.
 
 ## 3. Workflow
+
+Before running APPLE, process the raw Nanopore signal data with Dorado for basecalling and poly(A) tail-length estimation using the `--estimate-poly-a` option. Next, use primer-chop to remove sequencing primers and perform read filtering and quality control. The resulting cleaned reads, together with the Dorado tail-length estimates, provide the input for the APPLE workflow described below.
 
 Follow steps 3.1–3.3 to prepare annotated PASs, then use tail-length analysis, differential PAS count analysis, or gene-level APA analysis as appropriate for your question.
 
