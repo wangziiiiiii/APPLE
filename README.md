@@ -319,7 +319,6 @@ results <- Tail.DiffPair(
 
 | Output | Description |
 | --- | --- |
-| Result data frame | One row per retained PAS, identified by cluster_id. |
 | Descriptive statistics | n_control, n_treatment, means, medians, and standard deviations on the raw scale. |
 | Raw effect measures | fold_change is treatment mean / control mean; mean_diff and median_diff are treatment minus control. |
 | `log2_fc` | On log2-transformed data: mean difference for t-test, median difference for Wilcoxon, and condition coefficient for LMM. On raw data: log2 of the raw mean ratio. |
@@ -397,7 +396,128 @@ results <- DESeq2.PolyA(QpolyA, colData)
 
 ### 3.6 Differential APA analysis
 
-DEAPA() runs the complete differential alternative polyadenylation workflow. It combines the APA metrics from Quantify.GeneAPA(), relative poly(A) position changes, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU. Intergenic PASs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PASs are tested. One control can be compared with one or more treatment conditions in the same call.
+APPLE provides three component functions for characterizing gene-level APA changes. Each function reports a different aspect of PAS usage and can be run independently. The integrated `DEAPA()` function described at the end of this section combines these calculations with DEXSeq differential-usage analysis.
+
+| Function | Purpose | Main output |
+| --- | --- | --- |
+| `Quantify.GeneAPA()` | Measures the magnitude and direction of changes in the within-gene PAS usage distribution. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
+| `compute_gene_RPP()` | Calculates the relative polyadenylation position for every gene in every sample. | One row per gene with `gene_id` and one RPP column per sample. |
+| `compute_delta_RPP()` | Subtracts the control-group mean RPP from the treatment-group mean RPP. | One row per gene with `gene_id` and `delta_RPP`. |
+
+#### 3.6.1 Quantify within-gene PAS usage changes
+
+`Quantify.GeneAPA()` compares the PAS usage distribution of each gene between two conditions. It reports the proportion difference (`pd`), a direction score (`r`), and a chi-squared-test P value (`p.value`). The contrast order is **metadata column, control, treatment**.
+
+```r
+apa_metrics <- Quantify.GeneAPA(
+  QpolyA = QpolyA,
+  colData = sample_metadata,
+  contrast = c("condition", "Control", "Treatment1")
+)
+```
+
+##### Poly(A) site usage (PSU)
+
+For gene $g$, PAS $k$, and sample $s$, define usage as:
+
+```math
+P_{g,s,k} = \mathrm{PSU}_{g,s,k}
+= \frac{n_{g,s,k}}{\sum_{\ell=1}^{K_g} n_{g,s,\ell}}
+```
+
+Here, $n$ is the PAS read count and $K_g$ is the number of retained PASs in the gene. With a positive gene total, usage proportions sum to 1 within each sample.
+
+##### Proportion difference (PD)
+
+PD measures the magnitude of the change in PAS usage. For each control-treatment replicate pair, the code sums absolute usage differences across PASs and divides by two. It then averages over all cross-condition replicate pairs:
+
+```math
+\mathrm{PD}_g =
+\frac{1}{c_C c_T}
+\sum_{i=1}^{c_C}\sum_{j=1}^{c_T}
+\frac{1}{2}\sum_{k=1}^{K_g}
+\left|P_{g,C_i,k}-P_{g,T_j,k}\right|
+```
+
+$c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAS.
+
+##### Direction score and P values
+
+The `r` column is a count-weighted correlation between condition identity (control = 1, treatment = 2) and PAS center coordinate, corrected for strand and averaged across replicate pairs. Positive values indicate a distal shift in treatment; negative values indicate a proximal shift. Unlike RPP, this score uses genomic coordinates rather than position ranks.
+
+For each replicate pair, `dynamicsDetect()` runs a chi-squared test on a PAS-by-condition count table after removing rows with zero combined counts. If only one row remains, it assigns P = 1. The returned `p.value` is the **arithmetic mean of these pairwise P values**. It is not a P value from a joint generalized linear model, a formal combined P value, or an FDR-adjusted value.
+
+The example screening rule **pd > 0.1 and p.value < 0.05** can be applied explicitly by the user. It is not applied automatically by the function and should not be treated as a universal significance criterion.
+
+#### 3.6.2 Calculate gene-level relative poly(A) position
+
+`compute_gene_RPP()` summarizes proximal-versus-distal PAS usage for every gene in each sample. It produces the sample-level RPP values needed to compare relative PAS positions between conditions.
+
+```r
+gene_RPP <- compute_gene_RPP(
+  polyA = QpolyA@polyA,
+  sample_names = rownames(sample_metadata)
+)
+```
+
+##### Relative poly(A) position (RPP)
+
+PASs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
+
+```math
+w_{g,k}=\frac{k-1}{K_g-1},
+\qquad
+\mathrm{RPP}_{g,s}=\sum_{k=1}^{K_g}w_{g,k}P_{g,s,k}
+```
+
+The implementation uses `percent_rank()`, so tied centers share a rank. With positive sample totals, RPP ranges from 0 to 1. Larger values indicate more distal usage; smaller values indicate more proximal usage. RPP is a **rank-weighted position score**, not a physical length in nucleotides.
+
+#### 3.6.3 Calculate changes in relative poly(A) position
+
+`compute_delta_RPP()` uses the sample-level RPP table to calculate the treatment-minus-control change in relative PAS position.
+
+```r
+delta_RPP <- compute_delta_RPP(
+  polyA_rank = gene_RPP,
+  colData = sample_metadata,
+  control_cond = "Control",
+  treat_cond = "Treatment1"
+)
+```
+
+##### Delta RPP
+
+The change in relative poly(A) position is reported as `delta_RPP`:
+
+```math
+\Delta\mathrm{RPP}_g =
+\frac{1}{c_T}\sum_{j=1}^{c_T}\mathrm{RPP}_{g,T_j}
+- \frac{1}{c_C}\sum_{i=1}^{c_C}\mathrm{RPP}_{g,C_i}
+```
+
+| Result | Interpretation |
+| --- | --- |
+| delta_RPP > 0 | Shift toward distal PASs in treatment |
+| delta_RPP < 0 | Shift toward proximal PASs in treatment |
+| delta_RPP = 0 | No net change in the mean rank-weighted position; usage can still change |
+
+The default analysis includes genic PASs outside the 3′UTR. Interpret a shift as **3′UTR lengthening or shortening only when the selected PAS set and annotation support that interpretation**. The difference retains its sign; it is not an absolute difference.
+
+The outputs from `Quantify.GeneAPA()` and `compute_delta_RPP()` can be combined by `gene_id`:
+
+```r
+gene_result <- dplyr::left_join(
+  apa_metrics,
+  delta_RPP,
+  by = "gene_id"
+)
+```
+
+**Zero-count handling:** usage is undefined when a gene has zero total counts in a sample. The current PD routine skips such pairs but averages without removing missing values, which can yield NA. The RPP routine sums with na.rm = TRUE and can return 0 for zero-total samples; that value must not be interpreted as evidence of proximal usage. Check coverage in both conditions before interpreting results.
+
+#### 3.6.4 Run the integrated DEAPA workflow
+
+`DEAPA()` integrates `Quantify.GeneAPA()`, `compute_gene_RPP()`, and `compute_delta_RPP()` with DEXSeq. It returns gene-level APA metrics, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU in one call. Intergenic PASs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PASs are tested. One control can be compared with one or more treatment conditions in the same call.
 
 ```r
 deapa <- DEAPA(
@@ -416,7 +536,7 @@ Plot.DEAPACounts(DEAPA_gene, level = "gene")
 Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 ```
 
-#### Arguments
+##### Arguments
 
 | Parameter | Description |
 | --- | --- |
@@ -426,7 +546,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 | `treatment` | One or more treatment condition names. With NULL, every non-control condition is analyzed. |
 | `workers` | Number of processes used by BiocParallel::MulticoreParam(). |
 
-#### Output
+##### Output
 
 | Output | Description |
 | --- | --- |
@@ -434,122 +554,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 | `DEAPA_PAS` | PAS-level table containing featureID, gene_id, exonBaseMean, dispersion, stat, pvalue, padj, delta_PSU, and contrast. |
 | `DEXSeq.Result` | Named list containing the fitted DEXSeq object for every treatment-versus-control comparison. |
 
-#### Run the component functions separately
-
-DEAPA() calls and combines three existing APPLE functions. They remain available when only one intermediate calculation is needed.
-
-| Function | Purpose | Main output |
-| --- | --- | --- |
-| `Quantify.GeneAPA()` | Measures how strongly the within-gene PAS usage distribution changes between two conditions. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
-| `compute_gene_RPP()` | Calculates the relative polyadenylation position for every gene in every sample. | One row per gene with `gene_id` and one RPP column per sample. |
-| `compute_delta_RPP()` | Subtracts the control-group mean RPP from the treatment-group mean RPP. | One row per gene with `gene_id` and `delta_RPP`. |
-
-Run `Quantify.GeneAPA()` independently when only PD, the direction statistic, and the chi-squared P-value are required. The contrast order is **metadata column, control, treatment**.
-
-```r
-apa_metrics <- Quantify.GeneAPA(
-  QpolyA = QpolyA,
-  colData = sample_metadata,
-  contrast = c("condition", "Control", "Treatment1")
-)
-```
-
-Calculate sample-level gene RPP values independently with `compute_gene_RPP()`:
-
-```r
-gene_RPP <- compute_gene_RPP(
-  polyA = QpolyA@polyA,
-  sample_names = rownames(sample_metadata)
-)
-```
-
-Use the resulting table to calculate the treatment-minus-control RPP difference:
-
-```r
-delta_RPP <- compute_delta_RPP(
-  polyA_rank = gene_RPP,
-  colData = sample_metadata,
-  control_cond = "Control",
-  treat_cond = "Treatment1"
-)
-```
-
-The two gene-level outputs can be combined by `gene_id`:
-
-```r
-gene_result <- dplyr::left_join(
-  apa_metrics,
-  delta_RPP,
-  by = "gene_id"
-)
-```
-
-These separate calls do not calculate the DEXSeq gene-level `qvalue`, PAS-level `padj`, or `delta_PSU`. Use DEAPA() when those complete differential APA results are required.
-
-#### Poly(A) site usage (PSU)
-
-For gene $g$, PAS $k$, and sample $s$, define usage as:
-
-```math
-P_{g,s,k} = \mathrm{PSU}_{g,s,k}
-= \frac{n_{g,s,k}}{\sum_{\ell=1}^{K_g} n_{g,s,\ell}}
-```
-
-Here, $n$ is the PAS read count and $K_g$ is the number of retained PASs in the gene. With a positive gene total, usage proportions sum to 1 within each sample.
-
-#### Proportion difference (PD)
-
-PD measures the magnitude of the change in PAS usage. For each control-treatment replicate pair, the code sums absolute usage differences across PASs and divides by two. It then averages over all cross-condition replicate pairs:
-
-```math
-\mathrm{PD}_g =
-\frac{1}{c_C c_T}
-\sum_{i=1}^{c_C}\sum_{j=1}^{c_T}
-\frac{1}{2}\sum_{k=1}^{K_g}
-\left|P_{g,C_i,k}-P_{g,T_j,k}\right|
-```
-
-$c_C$ and $c_T$ are the numbers of control and treatment replicates. For valid, nonzero sample totals, PD ranges from 0 to 1: 0 indicates identical usage distributions, and larger values indicate greater redistribution. **PD has no sign and does not describe shortening or lengthening.** The implementation uses the sum-based expression above, not the maximum difference at a single PAS.
-
-#### RPP
-
-Relative poly(A) position (RPP) summarizes proximal versus distal PAS usage. PASs are ordered along the direction of transcription: increasing center coordinates on the positive strand and decreasing coordinates on the negative strand. For distinct centers, the rank weight is:
-
-```math
-w_{g,k}=\frac{k-1}{K_g-1},
-\qquad
-\mathrm{RPP}_{g,s}=\sum_{k=1}^{K_g}w_{g,k}P_{g,s,k}
-```
-
-The implementation uses percent_rank(), so tied centers share a rank. With positive sample totals, RPP ranges from 0 to 1. Larger values indicate more distal usage; smaller values indicate more proximal usage. RPP is a **rank-weighted position score**, not a physical length in nucleotides.
-
-#### Delta RPP
-
-The change in relative poly(A) position is reported as delta_RPP. compute_delta_RPP() subtracts the control-group mean RPP from the treatment-group mean:
-
-```math
-\Delta\mathrm{RPP}_g =
-\frac{1}{c_T}\sum_{j=1}^{c_T}\mathrm{RPP}_{g,T_j}
-- \frac{1}{c_C}\sum_{i=1}^{c_C}\mathrm{RPP}_{g,C_i}
-```
-
-| Result | Interpretation |
-| --- | --- |
-| delta_RPP > 0 | Shift toward distal PASs in treatment |
-| delta_RPP < 0 | Shift toward proximal PASs in treatment |
-| delta_RPP = 0 | No net change in the mean rank-weighted position; usage can still change |
-
-The default analysis includes genic PASs outside the 3′UTR. Interpret a shift as **3′UTR lengthening or shortening only when the selected PAS set and annotation support that interpretation**. The difference retains its sign; it is not an absolute difference.
-
-#### Correlation score and P values
-
-The r column is a count-weighted correlation between condition identity (control = 1, treatment = 2) and PAS center coordinate, corrected for strand and averaged across replicate pairs. Positive values indicate a distal shift in treatment; negative values indicate a proximal shift. Unlike RPP, this score uses genomic coordinates rather than position ranks.
-
-For each replicate pair, dynamicsDetect() runs a chi-squared test on a PAS-by-condition count table after removing rows with zero combined counts. If only one row remains, it assigns P = 1. The returned p.value is the **arithmetic mean of these pairwise P values**. It is not a P value from a joint generalized linear model, a formal combined P value, or an FDR-adjusted value.
-
-The example screening rule **pd > 0.1 and p.value < 0.05** can be applied explicitly by the user. It is not applied automatically by the function and should not be treated as a universal significance criterion.
-
-**Zero-count handling:** usage is undefined when a gene has zero total counts in a sample. The current PD routine skips such pairs but averages without removing missing values, which can yield NA. The RPP routine sums with na.rm = TRUE and can return 0 for zero-total samples; that value must not be interpreted as evidence of proximal usage. Check coverage in both conditions before interpreting results.
+The three component functions can be used when only gene-level APA metrics or RPP changes are needed. They do not calculate the DEXSeq gene-level `qvalue`, PAS-level `padj`, or `delta_PSU`; use `DEAPA()` when the complete differential APA results are required.
 
 ## 4. Worked example
 
