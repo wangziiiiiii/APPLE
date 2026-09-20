@@ -597,7 +597,7 @@ Use the component functions when only one type of APA measurement is needed. Use
 
 ## 4. Worked example
 
-This worked example uses six bundled chromosome 22 BED files: two NC controls, two EX1 samples, and two EX2 samples. Each file retains complete site counts and tail-length lists from the same genomic region, allowing the core workflow and pairwise comparisons to be demonstrated without downloading the original FASTQ files.
+This worked example uses six bundled chromosome 22 BED files: two negative-control (NC) samples, two Example 1 (EX1) samples, and two Example 2 (EX2) samples. Here, EX1 and EX2 are abbreviations for Example 1 and Example 2, respectively. Each file retains complete site counts and tail-length lists from the same genomic region, allowing the core workflow and pairwise comparisons to be demonstrated without downloading the original FASTQ files.
 
 | Group | Replicates | Approximate reads per file |
 | --- | ---: | ---: |
@@ -765,7 +765,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 </table>
 
 
-With the stated thresholds, this chromosome 22 subset produced 7 distal and 4 proximal genes for EX1 versus NC, and 15 distal and 2 proximal genes for EX2 versus NC. The tail-length analysis identified 55 lengthening and 6 shortening PASs for EX1, and 5 lengthening and 3 shortening PASs for EX2. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
+With the stated thresholds, compared with NC, EX1 contained 7 genes showing a shift toward distal PAS usage and 4 genes showing a shift toward proximal PAS usage. Compared with NC, EX2 contained 15 genes showing a shift toward distal PAS usage and 2 genes showing a shift toward proximal PAS usage. The tail-length analysis identified 55 PASs with longer poly(A) tails and 6 PASs with shorter poly(A) tails in EX1 relative to NC, and 5 PASs with longer tails and 3 PASs with shorter tails in EX2 relative to NC. These values demonstrate the workflow on a reduced dataset and should not be treated as genome-wide biological conclusions.
 
 ## 5. License
 
