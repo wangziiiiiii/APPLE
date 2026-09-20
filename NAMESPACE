@@ -3,6 +3,7 @@
 export(Annotate.PolyA)
 export(Cluster.PolyA)
 export(DEAPA)
+export(DEXSeq.PolyA)
 export(DESeq2.PolyA)
 export(Extract_polyAsite)
 export(FU)

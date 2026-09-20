@@ -396,13 +396,14 @@ results <- DESeq2.PolyA(QpolyA, colData)
 
 ### 3.6 Differential APA analysis
 
-APPLE provides three component functions for characterizing gene-level APA changes. Each function reports a different aspect of PAS usage and can be run independently. The integrated `DEAPA()` function described at the end of this section combines these calculations with DEXSeq differential-usage analysis.
+APPLE provides four component functions for characterizing gene-level and PAS-level APA changes. Each function reports a different aspect of PAS usage and can be run independently. The integrated `DEAPA()` function described at the end of this section combines their results in one workflow.
 
 | Function | Purpose | Main output |
 | --- | --- | --- |
 | `Quantify.GeneAPA()` | Measures the magnitude and direction of changes in the within-gene PAS usage distribution. | One row per gene with `gene_id`, `pd`, `r`, and `p.value`. |
 | `compute_gene_RPP()` | Calculates the relative polyadenylation position for every gene in every sample. | One row per gene with `gene_id` and one RPP column per sample. |
 | `compute_delta_RPP()` | Subtracts the control-group mean RPP from the treatment-group mean RPP. | One row per gene with `gene_id` and `delta_RPP`. |
+| `DEXSeq.PolyA()` | Tests differential PAS usage between one treatment and one control condition. | Gene-level q-values, PAS-level statistics, delta PSU, and the fitted DEXSeq object. |
 
 #### 3.6.1 Quantify within-gene PAS usage changes
 
@@ -515,9 +516,47 @@ gene_result <- dplyr::left_join(
 
 **Zero-count handling:** usage is undefined when a gene has zero total counts in a sample. The current PD routine skips such pairs but averages without removing missing values, which can yield NA. The RPP routine sums with na.rm = TRUE and can return 0 for zero-total samples; that value must not be interpreted as evidence of proximal usage. Check coverage in both conditions before interpreting results.
 
-#### 3.6.4 Run the integrated DEAPA workflow
+#### 3.6.4 Test differential PAS usage with DEXSeq
 
-`DEAPA()` integrates `Quantify.GeneAPA()`, `compute_gene_RPP()`, and `compute_delta_RPP()` with DEXSeq. It returns gene-level APA metrics, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU in one call. Intergenic PASs and ERCC controls are excluded from DEXSeq, and only genes with at least two retained PASs are tested. One control can be compared with one or more treatment conditions in the same call.
+`DEXSeq.PolyA()` performs one treatment-versus-control DEXSeq analysis independently of the other APPLE APA metrics. It excludes intergenic PASs and ERCC controls, retains genes with at least two PASs, and returns both statistical significance and the direction of the PAS usage change. Run the function separately for each treatment condition.
+
+```r
+dexseq <- DEXSeq.PolyA(
+  QpolyA = QpolyA,
+  colData = sample_metadata,
+  control = "Control",
+  treatment = "Treatment1",
+  workers = 10
+)
+
+DEXSeq_gene <- dexseq$DEXSeq_gene
+DEXSeq_PAS <- dexseq$DEXSeq_PAS
+DEXSeq_result <- dexseq$DEXSeq.Result
+```
+
+##### Arguments
+
+| Parameter | Description |
+| --- | --- |
+| `QpolyA` | A QuantifyPolyA object containing annotated PASs. |
+| `colData` | Sample metadata; row names must match sample count columns and it must contain a condition column. |
+| `control` | Name of the control condition in `colData$condition`. |
+| `treatment` | Name of one treatment condition in `colData$condition`. |
+| `workers` | Number of processes used by `BiocParallel::MulticoreParam()`. |
+
+##### Output
+
+| Output | Description |
+| --- | --- |
+| `DEXSeq_gene` | Gene-level table containing `gene_id`, DEXSeq `qvalue`, and the contrast label. |
+| `DEXSeq_PAS` | PAS-level table containing DEXSeq statistics, `padj`, `delta_PSU`, and the contrast label. |
+| `DEXSeq.Result` | The fitted DEXSeq object for the selected comparison. |
+
+`delta_PSU` is the treatment-group mean PAS usage minus the control-group mean PAS usage. Positive values indicate increased usage in treatment, while negative values indicate decreased usage.
+
+#### 3.6.5 Run the integrated DEAPA workflow
+
+`DEAPA()` integrates `Quantify.GeneAPA()`, `compute_gene_RPP()`, `compute_delta_RPP()`, and `DEXSeq.PolyA()`. It returns gene-level APA metrics, DEXSeq gene-level q-values, PAS-level differential-usage statistics, and delta PSU in one call. One control can be compared with one or more treatment conditions in the same call.
 
 ```r
 deapa <- DEAPA(
@@ -554,7 +593,7 @@ Plot.DEAPACounts(DEAPA_PAS, level = "PAS")
 | `DEAPA_PAS` | PAS-level table containing featureID, gene_id, exonBaseMean, dispersion, stat, pvalue, padj, delta_PSU, and contrast. |
 | `DEXSeq.Result` | Named list containing the fitted DEXSeq object for every treatment-versus-control comparison. |
 
-The three component functions can be used when only gene-level APA metrics or RPP changes are needed. They do not calculate the DEXSeq gene-level `qvalue`, PAS-level `padj`, or `delta_PSU`; use `DEAPA()` when the complete differential APA results are required.
+Use the component functions when only one type of APA measurement is needed. Use `DEAPA()` when PD, the direction score, RPP changes, DEXSeq q-values, PAS-level adjusted P values, and delta PSU are required together.
 
 ## 4. Worked example
 

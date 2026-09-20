@@ -24,6 +24,7 @@ test_that("installed namespace exposes the new public API", {
   exports <- getNamespaceExports("APPLE")
   expect_true(all(c(
     "Remove.IP", "Map.Tail", "Tail.PCA", "Tail.DiffPair", "DEAPA",
+    "DEXSeq.PolyA",
     "Plot.TailPCA", "Plot.TailDensity", "Plot.TailVolcano",
     "Plot.PASPCA", "Plot.PASVolcano", "Plot.DEAPAVolcano",
     "Plot.DEAPACounts"

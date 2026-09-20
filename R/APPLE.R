@@ -2546,6 +2546,246 @@ summarize_mRNA_level_results_multi <- function(results, alpha = 0.05, control_gr
 #       Differential alternative polyadenylation          #
 ############################################################
 
+#' Differential PAS usage analysis with DEXSeq
+#'
+#' Test one treatment condition against one control condition with DEXSeq.
+#' The function reports gene-level q-values, PAS-level differential-usage
+#' statistics, delta PSU, and the fitted DEXSeq object.
+#'
+#' @param QpolyA A `QuantifyPolyA` object generated after poly(A)-site
+#'   clustering, annotation, and filtering.
+#' @param colData A data frame containing sample information. Row names must
+#'   match sample names in `QpolyA`, and a column named `condition` is required.
+#' @param control A character string specifying the control condition.
+#' @param treatment A character string specifying one treatment condition.
+#' @param workers Number of parallel workers passed to
+#'   [BiocParallel::MulticoreParam()].
+#'
+#' @return A list with three elements:
+#'   \describe{
+#'     \item{DEXSeq_gene}{Gene-level DEXSeq q-values and the contrast label.}
+#'     \item{DEXSeq_PAS}{PAS-level DEXSeq statistics, delta PSU, and the
+#'       contrast label.}
+#'     \item{DEXSeq.Result}{The fitted DEXSeq object.}
+#'   }
+#'
+#' @examples
+#' \dontrun{
+#' dexseq <- DEXSeq.PolyA(
+#'   QpolyA = QpolyA,
+#'   colData = colData,
+#'   control = "NC",
+#'   treatment = "EX1",
+#'   workers = 10
+#' )
+#'
+#' DEXSeq_gene <- dexseq$DEXSeq_gene
+#' DEXSeq_PAS <- dexseq$DEXSeq_PAS
+#' }
+#'
+#' @export
+DEXSeq.PolyA <- function(QpolyA,
+                         colData,
+                         control,
+                         treatment,
+                         workers = 10) {
+  if (!requireNamespace("DEXSeq", quietly = TRUE)) {
+    stop(
+      "Package 'DEXSeq' is required. Install it with ",
+      "BiocManager::install('DEXSeq').",
+      call. = FALSE
+    )
+  }
+  if (!requireNamespace("BiocParallel", quietly = TRUE)) {
+    stop(
+      "Package 'BiocParallel' is required. Install it with ",
+      "BiocManager::install('BiocParallel').",
+      call. = FALSE
+    )
+  }
+  if (!methods::is(QpolyA, "QuantifyPolyA")) {
+    stop("QpolyA must be a QuantifyPolyA object.", call. = FALSE)
+  }
+  if (!is.data.frame(colData)) {
+    stop("colData must be a data frame.", call. = FALSE)
+  }
+  if (!"condition" %in% colnames(colData)) {
+    stop("colData must contain a 'condition' column.", call. = FALSE)
+  }
+  if (is.null(rownames(colData)) || any(!nzchar(rownames(colData)))) {
+    stop("The row names of colData must contain sample names.", call. = FALSE)
+  }
+  if (anyDuplicated(rownames(colData))) {
+    stop("The row names of colData must be unique.", call. = FALSE)
+  }
+  if (nrow(QpolyA@polyA) == 0L) {
+    stop(
+      "QpolyA@polyA is empty. Run clustering, annotation, and filtering first.",
+      call. = FALSE
+    )
+  }
+
+  conditions <- as.character(colData$condition)
+  if (anyNA(conditions) || any(!nzchar(conditions))) {
+    stop("colData$condition cannot contain missing or empty values.", call. = FALSE)
+  }
+  available_conditions <- unique(conditions)
+  if (length(control) != 1L || is.na(control) || !nzchar(control)) {
+    stop("control must be one non-empty condition name.", call. = FALSE)
+  }
+  if (length(treatment) != 1L || is.na(treatment) || !nzchar(treatment)) {
+    stop("treatment must be one non-empty condition name.", call. = FALSE)
+  }
+  if (!control %in% available_conditions) {
+    stop(
+      "Control condition '", control, "' was not found in colData$condition.",
+      call. = FALSE
+    )
+  }
+  if (!treatment %in% available_conditions) {
+    stop(
+      "Treatment condition '", treatment,
+      "' was not found in colData$condition.",
+      call. = FALSE
+    )
+  }
+  if (identical(control, treatment)) {
+    stop("The control condition cannot also be the treatment.", call. = FALSE)
+  }
+  if (length(workers) != 1L || !is.numeric(workers) ||
+      is.na(workers) || !is.finite(workers) || workers < 1 ||
+      workers != as.integer(workers)) {
+    stop("workers must be a positive integer.", call. = FALSE)
+  }
+  workers <- as.integer(workers)
+
+  sample_names <- rownames(colData)
+  missing_samples <- setdiff(sample_names, QpolyA@sample_names)
+  if (length(missing_samples)) {
+    stop(
+      "Samples in colData that are absent from QpolyA: ",
+      paste(missing_samples, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  missing_count_columns <- setdiff(sample_names, colnames(QpolyA@polyA))
+  if (length(missing_count_columns)) {
+    stop(
+      "Sample columns absent from QpolyA@polyA: ",
+      paste(missing_count_columns, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  polyA <- QpolyA@polyA
+  required_columns <- c("type", "gene_id", "seqnames")
+  missing_columns <- setdiff(required_columns, colnames(polyA))
+  if (length(missing_columns)) {
+    stop(
+      "QpolyA@polyA is missing required columns: ",
+      paste(missing_columns, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  cluster_id <- rownames(polyA)
+  if (is.null(cluster_id) || any(!nzchar(cluster_id)) || anyDuplicated(cluster_id)) {
+    stop("rownames(QpolyA@polyA) must be unique PAS identifiers.", call. = FALSE)
+  }
+  polyA$cluster_id <- cluster_id
+  polyA$gene_id <- as.character(polyA$gene_id)
+
+  APA_Gene <- polyA |>
+    dplyr::filter(
+      .data[["type"]] != "intergenic",
+      !grepl("^ERCC", .data[["seqnames"]])
+    ) |>
+    dplyr::group_by(.data[["gene_id"]]) |>
+    dplyr::filter(dplyr::n() >= 2L) |>
+    dplyr::ungroup()
+  if (!nrow(APA_Gene)) {
+    stop("No genes with at least two eligible PASs were found.", call. = FALSE)
+  }
+
+  control_samples <- sample_names[conditions == control]
+  treatment_samples <- sample_names[conditions == treatment]
+  selected_samples <- c(control_samples, treatment_samples)
+  count_matrix <- as.matrix(APA_Gene[, selected_samples, drop = FALSE])
+  if (!is.numeric(count_matrix) || anyNA(count_matrix) ||
+      any(!is.finite(count_matrix)) || any(count_matrix < 0) ||
+      any(abs(count_matrix - round(count_matrix)) > sqrt(.Machine$double.eps))) {
+    stop("PAS counts must be finite, non-negative integers.", call. = FALSE)
+  }
+  storage.mode(count_matrix) <- "integer"
+
+  sample_data <- colData[selected_samples, , drop = FALSE]
+  sample_data$condition <- factor(
+    as.character(sample_data$condition),
+    levels = c(control, treatment)
+  )
+  BPPARAM <- BiocParallel::MulticoreParam(workers = workers)
+  dxd <- DEXSeq::DEXSeqDataSet(
+    countData = count_matrix,
+    sampleData = sample_data,
+    design = ~ sample + exon + condition:exon,
+    featureID = APA_Gene$cluster_id,
+    groupID = APA_Gene$gene_id,
+    featureRanges = NULL,
+    transcripts = NULL,
+    alternativeCountData = NULL
+  )
+  dxd <- DEXSeq::DEXSeq(dxd, BPPARAM = BPPARAM)
+
+  contrast_label <- paste0(treatment, " v.s. ", control)
+  gene_qvalue <- DEXSeq::perGeneQValue(dxd)
+  gene_result <- data.frame(
+    gene_id = as.character(names(gene_qvalue)),
+    qvalue = unname(gene_qvalue),
+    contrast = contrast_label,
+    stringsAsFactors = FALSE
+  )
+
+  polyA_PSU <- APA_Gene |>
+    dplyr::group_by(.data[["gene_id"]]) |>
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::all_of(selected_samples),
+        function(x) x / sum(x)
+      )
+    ) |>
+    dplyr::ungroup()
+  treatment_psu <- rowMeans(
+    as.data.frame(polyA_PSU[, treatment_samples, drop = FALSE])
+  )
+  control_psu <- rowMeans(
+    as.data.frame(polyA_PSU[, control_samples, drop = FALSE])
+  )
+  delta_psu <- data.frame(
+    featureID = as.character(polyA_PSU$cluster_id),
+    delta_PSU = treatment_psu - control_psu,
+    stringsAsFactors = FALSE
+  )
+
+  dxd_table <- as.data.frame(dxd)
+  pas_result <- data.frame(
+    featureID = as.character(dxd_table$featureID),
+    gene_id = as.character(dxd_table$groupID),
+    exonBaseMean = dxd_table$exonBaseMean,
+    dispersion = dxd_table$dispersion,
+    stat = dxd_table$stat,
+    pvalue = dxd_table$pvalue,
+    padj = dxd_table$padj,
+    stringsAsFactors = FALSE
+  ) |>
+    dplyr::left_join(delta_psu, by = "featureID") |>
+    dplyr::mutate(contrast = contrast_label)
+
+  list(
+    DEXSeq_gene = gene_result,
+    DEXSeq_PAS = pas_result,
+    DEXSeq.Result = dxd
+  )
+}
+
 #' Differential alternative polyadenylation analysis with DEXSeq
 #'
 #' Perform pairwise differential APA analyses between one control condition
@@ -2703,40 +2943,8 @@ DEAPA <- function(QpolyA,
 
   cluster_id <- rownames(polyA)
   if (is.null(cluster_id) || any(!nzchar(cluster_id)) || anyDuplicated(cluster_id)) {
-    stop("rownames(QpolyA@polyA) must be unique PAC identifiers.", call. = FALSE)
+    stop("rownames(QpolyA@polyA) must be unique PAS identifiers.", call. = FALSE)
   }
-  polyA$cluster_id <- cluster_id
-  polyA$gene_id <- as.character(polyA$gene_id)
-
-  APA_Gene <- polyA |>
-    dplyr::filter(
-      .data[["type"]] != "intergenic",
-      !grepl("^ERCC", .data[["seqnames"]])
-    ) |>
-    dplyr::group_by(.data[["gene_id"]]) |>
-    dplyr::filter(dplyr::n() >= 2L) |>
-    dplyr::ungroup()
-
-  if (!nrow(APA_Gene)) {
-    stop("No genes with at least two eligible PACs were found.", call. = FALSE)
-  }
-
-  count_values <- as.matrix(APA_Gene[, sample_names, drop = FALSE])
-  if (!is.numeric(count_values) || anyNA(count_values) ||
-      any(!is.finite(count_values)) || any(count_values < 0) ||
-      any(abs(count_values - round(count_values)) > sqrt(.Machine$double.eps))) {
-    stop("PAC counts must be finite, non-negative integers.", call. = FALSE)
-  }
-
-  polyA_PSU <- APA_Gene |>
-    dplyr::group_by(.data[["gene_id"]]) |>
-    dplyr::mutate(
-      dplyr::across(
-        dplyr::all_of(sample_names),
-        function(x) x / sum(x)
-      )
-    ) |>
-    dplyr::ungroup()
 
   gene_RPP <- compute_gene_RPP(
     polyA = QpolyA@polyA,
@@ -2744,13 +2952,7 @@ DEAPA <- function(QpolyA,
   )
   gene_RPP$gene_id <- as.character(gene_RPP$gene_id)
 
-  samples_by_condition <- split(sample_names, conditions)
-  BPPARAM <- BiocParallel::MulticoreParam(workers = workers)
-
   analyse_one_treatment <- function(treatment_name) {
-    control_samples <- samples_by_condition[[control]]
-    treatment_samples <- samples_by_condition[[treatment_name]]
-    selected_samples <- c(control_samples, treatment_samples)
     contrast_label <- paste0(treatment_name, " v.s. ", control)
 
     gene_result <- Quantify.GeneAPA(
@@ -2761,29 +2963,14 @@ DEAPA <- function(QpolyA,
     gene_result <- dplyr::ungroup(gene_result)
     gene_result$gene_id <- as.character(gene_result$gene_id)
 
-    count_matrix <- as.matrix(
-      APA_Gene[, selected_samples, drop = FALSE]
+    dexseq_result <- DEXSeq.PolyA(
+      QpolyA = QpolyA,
+      colData = colData,
+      control = control,
+      treatment = treatment_name,
+      workers = workers
     )
-    storage.mode(count_matrix) <- "integer"
-
-    dxd <- DEXSeq::DEXSeqDataSet(
-      countData = count_matrix,
-      sampleData = colData[selected_samples, , drop = FALSE],
-      design = ~ sample + exon + condition:exon,
-      featureID = APA_Gene$cluster_id,
-      groupID = APA_Gene$gene_id,
-      featureRanges = NULL,
-      transcripts = NULL,
-      alternativeCountData = NULL
-    )
-    dxd <- DEXSeq::DEXSeq(dxd, BPPARAM = BPPARAM)
-
-    gene_qvalue <- DEXSeq::perGeneQValue(dxd)
-    gene_qvalue <- data.frame(
-      gene_id = as.character(names(gene_qvalue)),
-      qvalue = unname(gene_qvalue),
-      stringsAsFactors = FALSE
-    )
+    gene_qvalue <- dexseq_result$DEXSeq_gene[, c("gene_id", "qvalue")]
 
     delta_rpp <- compute_delta_RPP(
       polyA_rank = gene_RPP,
@@ -2798,33 +2985,11 @@ DEAPA <- function(QpolyA,
       dplyr::left_join(delta_rpp, by = "gene_id") |>
       dplyr::mutate(contrast = contrast_label)
 
-    treatment_psu <- rowMeans(
-      as.data.frame(polyA_PSU[, treatment_samples, drop = FALSE])
+    list(
+      gene = gene_result,
+      pas = dexseq_result$DEXSeq_PAS,
+      dxd = dexseq_result$DEXSeq.Result
     )
-    control_psu <- rowMeans(
-      as.data.frame(polyA_PSU[, control_samples, drop = FALSE])
-    )
-    delta_psu <- data.frame(
-      featureID = as.character(polyA_PSU$cluster_id),
-      delta_PSU = treatment_psu - control_psu,
-      stringsAsFactors = FALSE
-    )
-
-    dxd_table <- as.data.frame(dxd)
-    pas_result <- data.frame(
-      featureID = as.character(dxd_table$featureID),
-      gene_id = as.character(dxd_table$groupID),
-      exonBaseMean = dxd_table$exonBaseMean,
-      dispersion = dxd_table$dispersion,
-      stat = dxd_table$stat,
-      pvalue = dxd_table$pvalue,
-      padj = dxd_table$padj,
-      stringsAsFactors = FALSE
-    ) |>
-      dplyr::left_join(delta_psu, by = "featureID") |>
-      dplyr::mutate(contrast = contrast_label)
-
-    list(gene = gene_result, pas = pas_result, dxd = dxd)
   }
 
   comparison_results <- lapply(treatment, analyse_one_treatment)
